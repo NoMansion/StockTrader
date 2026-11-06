@@ -1,0 +1,90 @@
+# ---- Data -------------------------------------------------------------
+data:
+  start: "2010-01-01"
+  cache_dir: "data"
+  # "yfinance" (free, dev), "tiingo", or "norgate" (Windows, NDU running)
+  provider: "norgate"
+  # "liquidity" = top-K by trailing 60d median dollar volume, evaluated day by
+  #               day; common stock on a major exchange only (SPACs, ADRs,
+  #               warrants, OTC excluded). Not bound to any index. (default)
+  # "norgate"   = point-in-time index constituents incl. delisted (Platinum+)
+  # "static"    = hand list in universe.py (or universe_csv) — survivorship-biased
+  universe: "liquidity"
+  liquidity_top_k: 1000          # ~Russell-1000-sized but chosen by the data
+  min_price: 5.0
+  index_name: "Russell 1000"     # only used when universe: norgate
+  universe_csv: null
+
+# ---- Signal / model ---------------------------------------------------
+model:
+  # "momentum" (no ML baseline) or "lgbm"
+  type: "momentum"
+  # forward-return horizon the ML model is trained to predict (trading days)
+  horizon_days: 10
+  # walk-forward: retrain every N trading days on a trailing window
+  retrain_every_days: 63
+  train_window_days: 756      # ~3 years
+  min_train_days: 252
+
+# ---- Portfolio rules (your enter / add / trim / exit logic) -----------
+portfolio:
+  top_n: 20                   # hold the top-N ranked names
+  rebalance_every_days: 1     # 1 = daily, 5 = weekly, 21 = monthly
+  # "optimizer" = Stage B: the model decides count and size (see below)
+  # "rank" = weight grows with rank (your add-on-up / trim-on-down rule),
+  # "equal", or "inverse_vol". top_n / min_trade_pct are ignored by "optimizer".
+  sizing: "optimizer"
+  vol_lookback_days: 20
+  max_weight: 0.10            # no single name above 10%
+  min_trade_pct: 0.20         # only add/trim if |drift| > 20% of target weight
+  cash_buffer: 0.02           # keep 2% cash
+  # Optional: don't rebuy a name within N days of exiting it (reduces whipsaw)
+  reentry_cooldown_days: 5
+
+# ---- Stage B optimizer (sizing: "optimizer") ---------------------------
+# Scores -> expected returns (IC * z-score * stock vol); recent returns ->
+# shrunk covariance; a constrained optimizer picks weights and, implicitly,
+# how many names to hold. Only risk appetite and cost penalty are set here.
+optimizer:
+  risk_aversion: 8.0          # higher = more names, smaller bets, more cash
+  tc_bps: 20                  # flat penalty, only used if costs.model is "flat"
+  tc_multiplier: 1.5          # pessimism applied to per-name cost estimates
+  cov_lookback: 120
+  shrinkage: 0.5              # 0 = raw sample cov, 1 = ignore correlations
+  ic_default: 0.03            # assumed edge until trailing IC is measured
+  ic_floor: 0.0               # trailing IC at/below this -> fully to cash
+  min_weight: 0.005           # drop positions smaller than 0.5%
+  max_positions: null         # null = model decides; or an integer cap
+
+# ---- Cost model -------------------------------------------------------
+# "impact": cost grows with each trade's size vs the stock's daily dollar
+#           volume (square-root market impact) — this is what lets the
+#           optimizer decide for itself which thin names are worth touching.
+# "flat":   a single slippage number (the old behaviour; optimistic in small caps)
+costs:
+  model: "impact"
+  capital: 100000             # your account size in $; impact scales with it
+  spread_bps: 3               # half-spread paid on every trade
+  impact_coef: 0.1            # raise if live fills are worse than backtest
+  max_participation: 0.05     # never plan > 5% of a stock's ADV in one day
+  flat_bps: 10                # used by "flat", and as the floor for "impact"
+  commission_per_trade: 0.0   # Alpaca is commission-free
+  fill: "close"               # decide after close; backtest fills at the close
+
+# ---- Auto-tune (optimizer appetite picked by walk-forward backtest) ----
+# At each retrain, replays the last tune_window days of allocation with every
+# (risk_aversion, tc_multiplier) combo and keeps the best after-cost Sharpe.
+# Only past data is used. Small grid on purpose: every extra knob the model
+# gets to pick is another way to overfit history.
+auto_tune:
+  enabled: true
+  risk_aversion: [4, 8, 16]
+  tc_multiplier: [1.0, 1.5, 2.5]
+  tune_window: 252
+  tune_rebalance_every: 5
+
+# ---- Live ---------------------------------------------------------------
+live:
+  # Run after close so today's bar is complete; orders queue for next open
+  schedule_local_time: "16:30"
+  timezone: "America/Chicago"

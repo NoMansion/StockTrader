@@ -1,0 +1,107 @@
+"""Rankers: turn features into a per-date score (higher = more likely to outperform).
+
+    MomentumRanker  — no ML baseline; the bar every model must clear.
+    LGBMRanker      — LightGBM regression on rank-normalized features,
+                      retrained walk-forward on a trailing window.
+
+Both expose:
+    fit(features, labels, end_date)   -> self      (no-op for the baseline)
+    score(features_at_date)           -> pd.Series (ticker -> score)
+"""
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+from .features import rank_normalize
+
+LGBM_PARAMS = {
+    "objective": "regression",
+    "learning_rate": 0.03,
+    "num_leaves": 15,
+    "min_data_in_leaf": 200,
+    "feature_fraction": 0.7,
+    "bagging_fraction": 0.7,
+    "bagging_freq": 1,
+    "lambda_l2": 5.0,
+    "verbose": -1,
+    "seed": 7,
+}
+
+
+class MomentumRanker:
+    """Score = 12-1 month momentum rank minus a small vol penalty."""
+
+    name = "momentum"
+    needs_training = False
+
+    def fit(self, features: pd.DataFrame, labels: pd.Series, end_date=None):
+        return self
+
+    def score(self, feats: pd.DataFrame) -> pd.Series:
+        r = feats.rank(pct=True)
+        s = 0.6 * r["mom_252_skip21"] + 0.3 * r["mom_126_skip5"] - 0.1 * r["vol_60"]
+        return s.dropna()
+
+
+class LGBMRanker:
+    """Cross-sectional LightGBM ranker. Requires `lightgbm`."""
+
+    name = "lgbm"
+    needs_training = True
+
+    def __init__(self, params: dict | None = None, num_rounds: int = 400):
+        self.params = {**LGBM_PARAMS, **(params or {})}
+        self.num_rounds = num_rounds
+        self.model = None
+        self.cols: list[str] = []
+
+    def fit(self, features: pd.DataFrame, labels: pd.Series, end_date=None):
+        import lightgbm as lgb
+
+        X = rank_normalize(features)
+        df = X.join(labels, how="inner").dropna()
+        if end_date is not None:
+            df = df[df.index.get_level_values("date") <= end_date]
+        if df.empty:
+            raise ValueError("No training rows; check horizon / data range")
+        self.cols = [c for c in df.columns if c != "y"]
+        ds = lgb.Dataset(df[self.cols].values, label=df["y"].values)
+        self.model = lgb.train(self.params, ds, num_boost_round=self.num_rounds)
+        return self
+
+    def score(self, feats: pd.DataFrame) -> pd.Series:
+        if self.model is None:
+            raise RuntimeError("fit() first")
+        X = feats.rank(pct=True)[self.cols].dropna()
+        return pd.Series(self.model.predict(X.values), index=X.index)
+
+
+def make_ranker(kind: str):
+    if kind == "momentum":
+        return MomentumRanker()
+    if kind == "lgbm":
+        return LGBMRanker()
+    raise ValueError(f"unknown ranker: {kind}")
+
+
+def trailing_ic(ranker, feats: pd.DataFrame, labels: pd.Series, dates: pd.DatetimeIndex, horizon: int, n: int = 126) -> float:
+    """Mean realised IC of `ranker` over the last `n` dates whose labels have
+    resolved (i.e. dates <= last_date - horizon). Used live to scale bets."""
+    resolved = dates[: len(dates) - horizon][-n:]
+    label_dates = set(labels.index.get_level_values("date"))
+    feat_dates = set(feats.index.get_level_values("date"))
+    ics = []
+    for d in resolved:
+        if d in label_dates and d in feat_dates:
+            ics.append(information_coefficient(ranker.score(feats.xs(d, level="date")), labels.xs(d, level="date")))
+    ics = [x for x in ics if np.isfinite(x)]
+    return float(np.mean(ics)) if len(ics) >= 20 else np.nan
+
+
+def information_coefficient(scores: pd.Series, labels: pd.Series) -> float:
+    """Spearman rank correlation between scores and realized labels on one date."""
+    j = pd.concat([scores.rename("s"), labels.rename("y")], axis=1).dropna()
+    if len(j) < 5:
+        return np.nan
+    return j["s"].rank().corr(j["y"].rank())
