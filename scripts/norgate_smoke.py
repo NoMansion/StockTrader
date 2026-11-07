@@ -35,7 +35,7 @@ def main():
         padding_setting=nd.PaddingType.NONE, limit=5, timeseriesformat="pandas-dataframe").shape)
 
     check("AAPL assetid", lambda: nd.assetid("AAPL"))
-    check("AAPL GICS sector", lambda: nd.classification_at_level("AAPL", "GICS", "ClassificationName", 1))
+    check("AAPL GICS sector", lambda: nd.classification_at_level("AAPL", "GICS", "Name", 1))
 
     ic = check("index membership (S&P 500) for AAPL, rows", lambda: len(nd.index_constituent_timeseries(
         "AAPL", "S&P 500", padding_setting=nd.PaddingType.NONE, start_date="2015-01-01",

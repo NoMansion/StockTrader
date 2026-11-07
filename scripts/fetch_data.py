@@ -21,10 +21,12 @@ def main():
     if args.universe:
         cfg["data"]["universe"] = args.universe
     close, volume, _, membership = load_dataset(cfg, provider=args.provider, refresh=args.refresh)
-    print(f"{close.shape[1]} tickers, {close.shape[0]} days, {close.index.min().date()} → {close.index.max().date()}")
+    print(f"{close.shape[1]} tickers, {close.shape[0]} days, {close.index.min().date()} â†’ {close.index.max().date()}")
+    if close.shape[1] == 0:
+        raise SystemExit("no bars fetched — check the provider/universe (for norgate: is NDU running?)")
     if membership is not None:
         n = membership.sum(axis=1)
-        print(f"point-in-time universe: {int(n.min())}–{int(n.max())} members per day (mean {n.mean():.0f})")
+        print(f"point-in-time universe: {int(n.min())}â€“{int(n.max())} members per day (mean {n.mean():.0f})")
 
 
 if __name__ == "__main__":

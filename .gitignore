@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .env
 data/*.parquet
+data/*.attempted.json
 data/*.json
 data/*.csv
 data/*.log

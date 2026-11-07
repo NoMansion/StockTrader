@@ -8,6 +8,7 @@ volume, adj_close. `adj_close` is split+dividend adjusted (total return).
 """
 from __future__ import annotations
 
+import json
 import os
 from datetime import date
 from pathlib import Path
@@ -93,16 +94,33 @@ def load_bars(
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache = cache_dir / f"bars_{provider}_{start}.parquet"
 
+    # Sidecar: every ticker ever requested from this cache. Tickers that returned
+    # no bars (e.g. names delisted before `start`) are recorded too, so they are
+    # not re-fetched on every load.
+    attempted_file = cache.with_suffix(".attempted.json")
+
+    def _attempted() -> set[str]:
+        if attempted_file.exists():
+            return set(json.loads(attempted_file.read_text()))
+        return set()
+
+    def _remember(ts: list[str]) -> None:
+        attempted_file.write_text(json.dumps(sorted(_attempted() | set(ts))))
+
     if cache.exists() and not refresh:
         bars = pd.read_parquet(cache)
-        have = set(bars["ticker"].unique())
+        have = set(bars["ticker"].unique()) | _attempted()
         missing = [t for t in tickers if t not in have]
         if missing:
-            bars = pd.concat([bars, PROVIDERS[provider](missing, start, end)], ignore_index=True)
-            bars.to_parquet(cache, index=False)
+            new = PROVIDERS[provider](missing, start, end)
+            if len(new):
+                bars = pd.concat([bars, new], ignore_index=True)
+                bars.to_parquet(cache, index=False)
+            _remember(missing)
     else:
         bars = PROVIDERS[provider](tickers, start, end)
         bars.to_parquet(cache, index=False)
+        attempted_file.write_text(json.dumps(sorted(set(tickers))))
 
     bars = bars[bars["ticker"].isin(tickers)].copy()
     bars["date"] = pd.to_datetime(bars["date"])
@@ -111,7 +129,10 @@ def load_bars(
 
 def clean_bars(bars: pd.DataFrame) -> pd.DataFrame:
     """Minimal hygiene. The full pipeline is specified in DATA_PLAN.md."""
-    b = bars.dropna(subset=["close", "adj_close"]).copy()
+    b = bars.copy()
+    for c in ["open", "high", "low", "close", "volume", "adj_close"]:
+        b[c] = pd.to_numeric(b[c], errors="coerce").astype("float64")   # never let object dtype through
+    b = b.dropna(subset=["close", "adj_close"])
     b = b[(b["close"] > 0) & (b["adj_close"] > 0)]
     # bad prints: high < low or close outside [low, high]
     ok = (b["high"] >= b["low"]) & (b["close"] <= b["high"] * 1.0001) & (b["close"] >= b["low"] * 0.9999)

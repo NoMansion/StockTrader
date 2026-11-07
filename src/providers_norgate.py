@@ -32,9 +32,16 @@ def _nd():
 
 
 def list_symbols(include_delisted: bool = True, common_stock_only: bool = True) -> list[str]:
-    """All US symbols (active + delisted). With `common_stock_only`, drops
-    ADRs, warrants, preferreds, units, funds and blank-check (SPAC) shells so a
-    liquidity-ranked universe isn't polluted by them."""
+    """All US symbols (active + delisted). With `common_stock_only`, keeps only
+    operating/holding companies: drops ETFs/ETNs, closed-end & investment
+    companies, SPAC shells, warrants, rights, preferreds and debt so a
+    liquidity-ranked universe isn't polluted by them.
+
+    Norgate's taxonomy (checked against NDU, Nov 2026): base_type is
+    "Stock Market" for everything; subtype1 is "Equity" / "Exchange Traded
+    Product" / "Derivative" / "Hybrid" / "Debt"; subtype2 distinguishes
+    "Operating/Holding Company" from "Special Purpose Company" (SPAC),
+    "Investment Company", "Warrant (Company Issued)", "Preferred", etc."""
     nd = _nd()
     syms = list(nd.database_symbols(DB_ACTIVE))
     if include_delisted:
@@ -45,12 +52,9 @@ def list_symbols(include_delisted: bool = True, common_stock_only: bool = True) 
     keep = []
     for s in syms:
         try:
-            if nd.base_type(s) != "Equity":
+            if nd.subtype1(s) != "Equity":
                 continue
-            if nd.subtype1(s) not in ("Common Stock", "Equity"):   # excludes ADR, Warrant, Preferred, Unit, Fund…
-                continue
-            spac = nd.blank_check_company_timeseries(s, timeseriesformat="pandas-dataframe")
-            if spac is not None and len(spac) and bool(spac.iloc[-1, -1]):
+            if nd.subtype2(s) != "Operating/Holding Company":
                 continue
             keep.append(s)
         except Exception:
@@ -125,7 +129,7 @@ def security_master(symbols: list[str]) -> pd.DataFrame:
                 "exchange": nd.exchange_name(s),
                 "first_date": pd.Timestamp(nd.first_quoted_date(s, datetimeformat="date")),
                 "last_date": pd.Timestamp(nd.last_quoted_date(s, datetimeformat="date")) if nd.last_quoted_date(s, datetimeformat="date") else pd.NaT,
-                "sector": nd.classification_at_level(s, "GICS", "ClassificationName", 1),
+                "sector": nd.classification_at_level(s, "GICS", "Name", 1),
             })
         except Exception:
             continue
