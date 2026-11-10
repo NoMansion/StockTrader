@@ -49,3 +49,9 @@ def test_preset_scores_real_features_without_nans_at_the_end():
     f = compute_features(close, vol)
     s = make_ranker("consistency").score(f.xs(close.index[-1], level="date"))
     assert len(s) == 6 and s.notna().all()
+
+
+def test_sue_fcfy_preset_ranks_on_fundamentals_only():
+    assert BLENDS["sue_fcfy"] == {"sue": 0.5, "fcf_yield": 0.5}
+    r = make_ranker("sue_fcfy")
+    assert isinstance(r, BlendRanker) and not r.needs_training

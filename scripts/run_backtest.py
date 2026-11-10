@@ -14,6 +14,7 @@ from src.config import build_backtest_config, build_rules, load_config
 from src.dataset import load_dataset
 from src.exposure import exposure_series
 from src.providers_sharadar import fundamentals_from_config
+from src.universe import trade_membership
 from src.ranking import BLENDS
 from src.sectors import load_sectors
 
@@ -57,6 +58,7 @@ def main():
         sectors = load_sectors(sorted(ever))
     rules = build_rules(cfg, top_n=args.top_n, sectors=sectors)
     expo = exposure_series(cfg["portfolio"]["exposure"], close, membership) if cfg["portfolio"].get("exposure") else None
+    membership = trade_membership(cfg["data"], raw_close, volume, membership)   # gates above see the full universe
 
     fund = fundamentals_from_config(cfg, close)
 

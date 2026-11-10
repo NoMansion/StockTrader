@@ -29,7 +29,7 @@ from src.providers_sharadar import fundamentals_from_config
 from src.portfolio import State, rebalance
 from src.ranking import make_ranker, trailing_ic
 from src.sectors import load_sectors
-from src.universe import apply_membership
+from src.universe import apply_membership, trade_membership
 
 STATE_PATH = Path("data/live_state.json")
 
@@ -92,6 +92,8 @@ def main():
         print(f"Using tuned settings from {last['date']}: risk_aversion={last['risk_aversion']}, tc_multiplier={last['tc_multiplier']}")
 
     close, volume, raw_close, membership = load_dataset(cfg, provider=args.provider, refresh=True)
+    gate_membership = membership                                          # exposure gates: full universe
+    membership = trade_membership(cfg["data"], raw_close, volume, membership)   # ranking: liquidity band, if set
     today = close.index[-1]
 
     # Rebalance cadence: the backtest trades every Nth trading day and holds in between, so do the same live.
@@ -124,7 +126,7 @@ def main():
 
     if p.get("exposure"):
         # market-regime scaling: shrink the invested budget when the universe index says so
-        e = float(exposure_series(p["exposure"], close, membership).iloc[-1])
+        e = float(exposure_series(p["exposure"], close, gate_membership).iloc[-1])
         rules = scale_rules(rules, e)
         print(f"Exposure '{p['exposure']}': {e:.2f} -> invested budget {1 - rules.cash_buffer:.0%}")
 

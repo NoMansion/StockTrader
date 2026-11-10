@@ -10,7 +10,12 @@ data:
   # "norgate"   = point-in-time index constituents incl. delisted (Platinum+)
   # "static"    = hand list in universe.py (or universe_csv) — survivorship-biased
   universe: "liquidity"
-  liquidity_top_k: 450           # top-450 by dollar volume (sweep 2026-11-09: 450 beat 500/1000 out of sample)
+  liquidity_top_k: 1000          # universe = top-1000 by dollar volume; the band below picks ranks 451-1000
+  # Trade only liquidity ranks lo+1..hi of that universe (null = trade the whole top-K). The exposure
+  # gates still read the full top-K index. Sweep 2026-11-10: the SUE + FCF-yield ranker on ranks
+  # 451-1000 (1.06 stitched Sharpe, 0.89 over T-bills) beat the best top-450 model (1.00 / 0.84);
+  # the same ranker on the top 450 scores 0.99, and the old leader on the band only 0.94.
+  liquidity_band: [450, 1000]
   min_price: 5.0
   index_name: "Russell 1000"     # only used when universe: norgate
   universe_csv: null
@@ -18,9 +23,9 @@ data:
 # ---- Signal / model ---------------------------------------------------
 model:
   # "momentum" (no ML baseline) or "lgbm"
-  # Live since 2026-11-10 (sweep leader): 0.35*mom_252_skip21 + 0.07*mom_126_skip5 + 0.28*consistency_189
-  # + 0.30*fcf_yield. Previous paper model: "consistency_heavy" (same without the FCF tilt).
-  type: "c189f_fcfy30"
+  # Live since 2026-11-10 pm (sweep leader): 0.5*sue + 0.5*fcf_yield on liquidity ranks 451-1000, 40 names.
+  # Previous paper models: "c189f_fcfy30" on the top 450 (2026-11-10 am), "consistency_heavy" before that.
+  type: "sue_fcfy"
   # forward-return horizon the ML model is trained to predict (trading days)
   horizon_days: 10
   # walk-forward: retrain every N trading days on a trailing window
@@ -35,7 +40,7 @@ model:
 
 # ---- Portfolio rules (your enter / add / trim / exit logic) -----------
 portfolio:
-  top_n: 55                   # hold the top-N ranked names
+  top_n: 40                   # hold the top-N ranked names (sweep 2026-11-10: 40 beat 55/70 on the band)
   rebalance_every_days: 3     # 1 = daily, 5 = weekly, 21 = monthly. Sweep 2026-11-09: 3 beat 1 (less churn, same return)
   # "optimizer" = Stage B: the model decides count and size (see below)
   # "rank" = weight grows with rank (your add-on-up / trim-on-down rule),

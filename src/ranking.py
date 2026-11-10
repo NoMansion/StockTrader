@@ -111,6 +111,10 @@ BLENDS: dict[str, dict[str, float]] = {
     # the 2000s out of sample vs 0.72 for momentum; blending it INTO the momentum score did worse
     # than either alone, so it is meant to run as its own book (see portfolio.books).
     "earnings": {"sue": 1.0},
+    # Leader since 2026-11-10: earnings surprise + free-cash-flow yield, 50/50, traded on liquidity ranks
+    # 451-1000 (data.liquidity_band) with 40 names. Stitched 26-yr Sharpe 1.06 / 11.1% CAGR / -19% drawdown
+    # (0.89 excess over T-bills vs 0.84 for c189f_fcfy30 on the top 450). Needs model.fundamentals: sharadar.
+    "sue_fcfy": {"sue": 0.5, "fcf_yield": 0.5},
 }
 
 

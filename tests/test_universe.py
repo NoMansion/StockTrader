@@ -79,3 +79,21 @@ def test_clean_bars_drops_placeholder_prices():
     ]
     out = clean_bars(pd.DataFrame(rows))
     assert len(out) == 1 and out["close"].iloc[0] == 1.0
+
+
+def test_trade_membership_keeps_only_the_liquidity_band(synthetic_prices):
+    from src.universe import trade_membership
+    close, volume = synthetic_prices
+    full = liquidity_membership(close, volume, top_k=20, min_price=5.0)
+    data_cfg = {"liquidity_top_k": 20, "liquidity_band": [10, 20], "min_price": 5.0}
+    band = trade_membership(data_cfg, close, volume, full)
+    top10 = liquidity_membership(close, volume, top_k=10, min_price=5.0)
+    warm = close.index[100:]
+    assert (band.loc[warm].sum(axis=1) == 10).all()              # ranks 11..20 only
+    assert not (band & top10).any().any()                         # never a top-10 name
+    assert (band.loc[warm] | top10.loc[warm]).equals(full.loc[warm].astype(bool))
+    assert trade_membership({"liquidity_top_k": 20}, close, volume, full) is full   # no band: untouched
+    assert trade_membership(data_cfg, close, volume, None) is None
+    import pytest
+    with pytest.raises(ValueError):
+        trade_membership({"liquidity_top_k": 450, "liquidity_band": [450, 1000]}, close, volume, full)

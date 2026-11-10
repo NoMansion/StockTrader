@@ -65,6 +65,24 @@ def liquidity_membership(close: pd.DataFrame, volume: pd.DataFrame, top_k: int =
     return (rank <= top_k).fillna(False)
 
 
+def trade_membership(data_cfg: dict, raw_close: pd.DataFrame, volume: pd.DataFrame,
+                     membership: pd.DataFrame | None) -> pd.DataFrame | None:
+    """Apply `data.liquidity_band: [lo, hi]`: trade only liquidity ranks lo+1..hi of the top-`hi`
+    universe (the dataset must be loaded with liquidity_top_k = hi). Only ranking and selection are
+    restricted; the exposure gates keep the full top-`hi` universe, which measures the broad market.
+    Sweep 2026-11-10: the SUE + FCF-yield ranker on ranks 451-1000 beat every top-450 setup."""
+    band = data_cfg.get("liquidity_band")
+    if not band or membership is None:
+        return membership
+    lo, hi = int(band[0]), int(band[1])
+    top_k = int(data_cfg.get("liquidity_top_k", 500))
+    if not 0 < lo < hi or top_k != hi:
+        raise ValueError(f"data.liquidity_band {band!r} needs 0 < lo < hi and liquidity_top_k == hi (got {top_k})")
+    top = liquidity_membership(raw_close, volume, top_k=lo, min_price=float(data_cfg.get("min_price", 5.0)))
+    top = top.reindex_like(membership).fillna(False).astype(bool)
+    return membership & ~top
+
+
 def apply_membership(scores: pd.Series, membership: pd.DataFrame | None, date: pd.Timestamp) -> pd.Series:
     """Keep only names that were in the universe on `date`."""
     if membership is None or date not in membership.index:
