@@ -10,9 +10,17 @@ Timing matches the stock book: sleeve weights set at the close of day t earn the
 return on t+1. Pre-ETF history is spliced from index returns (SPLICE) so 2000-2004 can be
 backtested; live trading only ever touches the ETF itself.
 
+Budget. By default the sleeve only takes the cash the exposure layer leaves above the base
+cash buffer (idle = 1 - stocks - cash_buffer). With `full: true` it takes everything the stock
+book does not hold minus a small `base` buffer (idle = 1 - stocks - base), so a large
+cash_buffer becomes a stock/sleeve split: the Nov 2026 hybrid leader runs cash_buffer 0.67 with
+an always-equal SPY/IEF/GLD sleeve, i.e. about one quarter momentum stocks and three quarters
+balanced ETFs. Without `full` that configuration would leave 65% in T-bills.
+
 Config (config.yaml):
     portfolio:
       sleeve: {assets: [IEF, GLD], rule: always_eq, frac: 1.0}   # null = off
+      sleeve: {assets: [SPY, IEF, GLD], rule: always_eq, full: true, base: 0.02}   # hybrid
       cash_yield: false      # backtest accounting only: idle cash earns the 13-week T-bill yield
 """
 from __future__ import annotations
@@ -28,6 +36,8 @@ from . import exposure as _expo
 SPLICE: dict[str, tuple[str, str | None]] = {
     "TLT": ("TLT", "$USBIG"), "IEF": ("IEF", "$USBIG"), "LQD": ("LQD", "$USBIG"),
     "SHY": ("SHY", None), "GLD": ("GLD", "$BCOMPR"), "BIL": ("BIL", None), "SGOV": ("SGOV", None),
+    "SPY": ("SPY", None), "QQQ": ("QQQ", None), "IWM": ("IWM", None), "EFA": ("EFA", None),
+    "EEM": ("EEM", None), "DBC": ("DBC", "$BCOMPR"), "VNQ": ("VNQ", None), "TIP": ("TIP", "$USBIG"),
 }
 TBILL_SYMBOL = "%IRX"      # 13-week T-bill discount yield, in percent
 
@@ -38,6 +48,8 @@ class SleeveConfig:
     rule: str = "always_eq"          # always_eq | trend_eq | momN (N months, trend-filtered)
     frac: float = 1.0                # share of idle cash the sleeve uses
     cost_bps: float = 5.0            # one-way cost per sleeve trade in the backtest
+    full: bool = False               # True: idle = 1 - stocks - base (cash_buffer becomes a stock/sleeve split)
+    base: float = 0.02               # the small cash buffer kept when full is True
 
     def __post_init__(self):
         self.assets = tuple(self.assets)
@@ -80,6 +92,11 @@ def sleeve_allocation(prices: pd.DataFrame, rule: str) -> pd.DataFrame:
     raise ValueError(f"unknown sleeve rule: {rule}")
 
 
+def sleeve_buffer(cfg: SleeveConfig, base_cash_buffer: float) -> float:
+    """The cash the sleeve must leave untouched: the book's cash_buffer, or `base` when `full`."""
+    return float(cfg.base) if cfg.full else float(base_cash_buffer)
+
+
 def idle_cash(invested: pd.Series | float, base_cash_buffer: float, frac: float) -> pd.Series | float:
     """Cash above the base buffer that the sleeve may use."""
     idle = 1.0 - invested - float(base_cash_buffer)
@@ -94,7 +111,7 @@ def apply_sleeve(result, base_cash_buffer: float, cfg: SleeveConfig, prices: pd.
     rets = px.pct_change().fillna(0.0)
     aw = sleeve_allocation(px, cfg.rule)
     invested = result.weights.reindex(idx).fillna(0.0).sum(axis=1)
-    w = aw.mul(idle_cash(invested, base_cash_buffer, cfg.frac), axis=0)   # set at close t ...
+    w = aw.mul(idle_cash(invested, sleeve_buffer(cfg, base_cash_buffer), cfg.frac), axis=0)   # set at close t ...
     w_prev = w.shift(1).fillna(0.0)                                         # ... earns t+1
     sleeve_ret = (w_prev * rets).sum(axis=1) - (w - w_prev).abs().sum(axis=1) * cfg.cost_bps / 1e4
     result.daily["sleeve_ret"] = sleeve_ret
@@ -120,6 +137,6 @@ def apply_cash_yield(result, tbill_pct: pd.Series | None = None):
 def live_sleeve_targets(stock_weights: pd.Series, base_cash_buffer: float, cfg: SleeveConfig,
                         prices: pd.DataFrame) -> pd.Series:
     """Today's sleeve target weights given today's stock targets (both as fractions of equity)."""
-    idle = idle_cash(float(stock_weights.sum()), base_cash_buffer, cfg.frac)
+    idle = idle_cash(float(stock_weights.sum()), sleeve_buffer(cfg, base_cash_buffer), cfg.frac)
     aw = sleeve_allocation(prices, cfg.rule).iloc[-1]
     return (aw * idle).round(6)

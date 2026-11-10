@@ -100,3 +100,15 @@ def test_live_targets_split_idle_cash_equally():
 def test_unknown_asset_is_rejected():
     with pytest.raises(ValueError):
         SleeveConfig(assets=("IEF", "XYZ"))
+
+
+def test_full_sleeve_takes_everything_above_its_base_buffer():
+    """full: true turns a large cash_buffer into a stock/sleeve split instead of a T-bill pile."""
+    cfg = SleeveConfig(assets=("SPY", "IEF", "GLD"), full=True, base=0.02, cost_bps=0.0)
+    px = sleeve_prices(cfg.assets, IDX)
+    out = apply_sleeve(_result(0.24), base_cash_buffer=0.67, cfg=cfg, prices=px)
+    assert out.daily["sleeve_w"].iloc[1:].round(6).eq(round(1 - 0.24 - 0.02, 6)).all()
+    plain = apply_sleeve(_result(0.24), 0.67, SleeveConfig(assets=("SPY", "IEF", "GLD"), cost_bps=0.0), px)
+    assert plain.daily["sleeve_w"].iloc[1:].round(6).eq(round(1 - 0.24 - 0.67, 6)).all()
+    live = live_sleeve_targets(pd.Series({"AAPL": 0.24}), 0.67, cfg, px)
+    assert live.sum() == pytest.approx(0.74, abs=1e-5) and live["SPY"] == pytest.approx(0.74 / 3, abs=1e-5)
