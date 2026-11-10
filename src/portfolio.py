@@ -35,6 +35,10 @@ class Rules:
     cash_buffer: float = 0.02
     reentry_cooldown_days: int = 5
     optimizer: "OptimizerConfig | None" = None   # used when sizing == "optimizer"
+    # "equal": fill top_n with an equal number of names per sector (best-ranked
+    # within each), remaining slots from the overall ranking. None = plain top-N.
+    sector_mode: str | None = None
+    sectors: dict | None = field(default=None, repr=False)   # ticker -> sector name
 
 
 @dataclass
@@ -89,7 +93,26 @@ def select_top(scores: pd.Series, rules: Rules, state: State, today: pd.Timestam
         if t not in held and (today - d).days < rules.reentry_cooldown_days
     }
     s = s[~s.index.isin(blocked)]
+    if rules.sector_mode == "equal" and rules.sectors:
+        return _select_equal_sector(s, rules.top_n, rules.sectors)
+    if rules.sector_mode not in (None, "equal"):
+        raise ValueError(f"unknown sector_mode: {rules.sector_mode}")
     return s.head(rules.top_n)
+
+
+def _select_equal_sector(s: pd.Series, top_n: int, sectors: dict) -> pd.Series:
+    """Equal slots per known sector (top_n // n_sectors each, best-ranked names
+    within the sector), then fill what is left from the overall ranking.
+    Names with no sector only compete for the leftover slots."""
+    sec = np.array([sectors.get(t, "Unknown") for t in s.index])
+    groups = [g for g in sorted(set(sec)) if g != "Unknown"]
+    per = max(1, top_n // max(1, len(groups)))
+    keep: list = []
+    for g in groups:
+        keep += list(s.index[sec == g][:per])
+    rest = s[~s.index.isin(keep)]
+    keep += list(rest.index[: max(0, top_n - len(keep))])
+    return s.loc[keep].sort_values(ascending=False)
 
 
 def rebalance(
@@ -131,16 +154,14 @@ def rebalance(
     chosen = select_top(scores, rules, state, today)
     target = size_positions(chosen, vol, rules).reindex(current.index).fillna(0.0)
 
-    new = current.copy()
-    for t in current.index:
-        cur, tgt = current[t], target[t]
-        if tgt == 0:
-            new[t] = 0.0                                    # exit (or never held)
-        elif cur == 0:
-            new[t] = tgt                                    # enter
-        else:
-            drift = abs(cur - tgt) / tgt
-            new[t] = tgt if drift > rules.min_trade_pct else cur   # add / trim / hold
+    cur, tgt = current.to_numpy(dtype=float), target.to_numpy(dtype=float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        drift = np.abs(cur - tgt) / tgt
+    new = pd.Series(
+        np.where(tgt == 0, 0.0,                                   # exit (or never held)
+                 np.where(cur == 0, tgt,                          # enter
+                          np.where(drift > rules.min_trade_pct, tgt, cur))),   # add / trim / hold
+        index=current.index)
 
     # Held-but-untouched names keep their drifted weight, so the total can
     # exceed the budget. Cash is finite: scale down the *buys* to fit.
@@ -157,9 +178,9 @@ def rebalance(
     trades = trades[trades.abs() > 1e-9]
 
     new_state = State(weights=new[new > 0].copy(), last_exit=dict(state.last_exit))
-    for t in trades.index:
-        if current[t] > 0 and new[t] == 0:
-            new_state.last_exit[t] = today
+    exited = trades.index[(current[trades.index] > 0).to_numpy() & (new[trades.index] == 0).to_numpy()]
+    for t in exited:
+        new_state.last_exit[t] = today
     return new[new > 0], trades, new_state
 
 

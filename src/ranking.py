@@ -77,11 +77,53 @@ class LGBMRanker:
         return pd.Series(self.model.predict(X.values), index=X.index)
 
 
-def make_ranker(kind: str):
+class BlendRanker:
+    """Weighted sum of per-date percentile ranks of features. Negative weights
+    penalize. The Nov 2026 sweep's winner is the "consistency" preset below."""
+
+    name = "blend"
+    needs_training = False
+
+    def __init__(self, weights: dict[str, float]):
+        if not weights:
+            raise ValueError("BlendRanker needs a non-empty weights dict")
+        self.weights = dict(weights)
+
+    def fit(self, features: pd.DataFrame, labels: pd.Series, end_date=None):
+        return self
+
+    def score(self, feats: pd.DataFrame) -> pd.Series:
+        r = feats.rank(pct=True)
+        return sum(w * r[k] for k, w in self.weights.items()).dropna()
+
+
+# Named blends. "consistency" = 12-1m momentum + 6m momentum + share of positive
+# months over the past 9 months; found by the Nov 2026 sweep (best holdout Sharpe).
+BLENDS: dict[str, dict[str, float]] = {
+    "consistency": {"mom_252_skip21": 0.5, "mom_126_skip5": 0.2, "consistency_189": 0.3},
+    "consistency_heavy": {"mom_252_skip21": 0.5, "mom_126_skip5": 0.1, "consistency_189": 0.4},
+    "novol": {"mom_252_skip21": 0.6, "mom_126_skip5": 0.4},
+    # Leader of the Nov 2026 sweep: consistency_heavy scaled to 70% plus a 30% free-cash-flow-yield
+    # tilt. Stitched 26-yr Sharpe 1.00 / 10.6% CAGR / -18% drawdown with a 3-day rebalance, T-bill
+    # yield on idle cash and the IEF/GLD sleeve (0.97 without the tilt). Needs model.fundamentals: sharadar.
+    "c189f_fcfy30": {"mom_252_skip21": 0.35, "mom_126_skip5": 0.07, "consistency_189": 0.28, "fcf_yield": 0.3},
+    # Earnings-surprise book (needs model.fundamentals: sharadar). Sweep 2026-11-09: 0.80 Sharpe on
+    # the 2000s out of sample vs 0.72 for momentum; blending it INTO the momentum score did worse
+    # than either alone, so it is meant to run as its own book (see portfolio.books).
+    "earnings": {"sue": 1.0},
+}
+
+
+def make_ranker(kind: str, weights: dict[str, float] | None = None):
+    """`kind`: "momentum" | "lgbm" | a BLENDS preset | "blend" (with `weights`)."""
     if kind == "momentum":
         return MomentumRanker()
     if kind == "lgbm":
         return LGBMRanker()
+    if kind == "blend":
+        return BlendRanker(weights or {})
+    if kind in BLENDS:
+        return BlendRanker(weights or BLENDS[kind])
     raise ValueError(f"unknown ranker: {kind}")
 
 

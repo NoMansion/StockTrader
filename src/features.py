@@ -10,11 +10,17 @@ import numpy as np
 import pandas as pd
 
 
-def compute_features(close: pd.DataFrame, volume: pd.DataFrame) -> pd.DataFrame:
+def compute_features(close: pd.DataFrame, volume: pd.DataFrame, raw_close: pd.DataFrame | None = None,
+                     fundamentals: dict[str, pd.DataFrame] | None = None) -> pd.DataFrame:
     """Return a long DataFrame indexed by (date, ticker) with raw feature columns.
 
     close: date x ticker adjusted close; volume: date x ticker volume.
+    raw_close: unadjusted close, used for dollar volume (volume is unadjusted
+    too); falls back to `close` when not given.
+    fundamentals: optional {feature: date x ticker panel} (src/fundamentals.py), aligned to
+    `close` and added as extra columns; names without data get the day's median.
     """
+    px = raw_close if raw_close is not None else close
     ret = close.pct_change()
     feats = {
         # momentum at several horizons; skip the last 5 days (short-term reversal)
@@ -29,15 +35,29 @@ def compute_features(close: pd.DataFrame, volume: pd.DataFrame) -> pd.DataFrame:
         "vol_60": ret.rolling(60).std(),
         # volume relative to its own history
         "volu_ratio_20": volume / volume.rolling(20).mean(),
-        "dollar_vol_60": np.log((close * volume).rolling(60).mean()),
+        "dollar_vol_60": np.log((px * volume).rolling(60).mean()),
         # distance from 52-week high
         "dist_52w_high": close / close.rolling(252).max() - 1,
         # max drawdown over 63d
         "dd_63": close / close.rolling(63).max() - 1,
+        # path consistency: fraction of rolling 21d returns that were positive.
+        # Rewards names that trended steadily rather than in one jump.
+        "consistency_189": _consistency(close, 189),
+        "consistency_252": _consistency(close, 252),
     }
+    if fundamentals:
+        from .fundamentals import align_to_prices
+        for k, panel in fundamentals.items():
+            feats[k] = align_to_prices(panel, close)
     long = pd.concat({k: v.stack() for k, v in feats.items()}, axis=1)
     long.index.names = ["date", "ticker"]
     return long
+
+
+def _consistency(close: pd.DataFrame, window: int, ret_days: int = 21) -> pd.DataFrame:
+    """Share of the trailing `window` days on which the `ret_days`-day return was positive."""
+    r = close.pct_change(ret_days)
+    return (r > 0).astype("float32").where(r.notna()).rolling(window, min_periods=window // 2).mean()
 
 
 def rank_normalize(features: pd.DataFrame) -> pd.DataFrame:

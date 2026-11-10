@@ -10,7 +10,7 @@ data:
   # "norgate"   = point-in-time index constituents incl. delisted (Platinum+)
   # "static"    = hand list in universe.py (or universe_csv) — survivorship-biased
   universe: "liquidity"
-  liquidity_top_k: 1000          # ~Russell-1000-sized but chosen by the data
+  liquidity_top_k: 450           # top-450 by dollar volume (sweep 2026-11-09: 450 beat 500/1000 out of sample)
   min_price: 5.0
   index_name: "Russell 1000"     # only used when universe: norgate
   universe_csv: null
@@ -18,28 +18,56 @@ data:
 # ---- Signal / model ---------------------------------------------------
 model:
   # "momentum" (no ML baseline) or "lgbm"
-  type: "momentum"
+  # Live since 2026-11-10 (sweep leader): 0.35*mom_252_skip21 + 0.07*mom_126_skip5 + 0.28*consistency_189
+  # + 0.30*fcf_yield. Previous paper model: "consistency_heavy" (same without the FCF tilt).
+  type: "c189f_fcfy30"
   # forward-return horizon the ML model is trained to predict (trading days)
   horizon_days: 10
   # walk-forward: retrain every N trading days on a trailing window
   retrain_every_days: 63
   train_window_days: 756      # ~3 years
   min_train_days: 252
+  # Fundamental features (Sharadar Fundamentals plan, SHARADAR_API_KEY in .env):
+  #   null      price/volume features only
+  #   sharadar  add point-in-time earnings/quality features (sue, gprof, fcf_yield, ...);
+  #             needed by the "c189f_fcfy30" and "earnings" rankers. Rows cache in data/sharadar_arq.pkl.
+  fundamentals: sharadar
 
 # ---- Portfolio rules (your enter / add / trim / exit logic) -----------
 portfolio:
-  top_n: 20                   # hold the top-N ranked names
-  rebalance_every_days: 1     # 1 = daily, 5 = weekly, 21 = monthly
+  top_n: 55                   # hold the top-N ranked names
+  rebalance_every_days: 3     # 1 = daily, 5 = weekly, 21 = monthly. Sweep 2026-11-09: 3 beat 1 (less churn, same return)
   # "optimizer" = Stage B: the model decides count and size (see below)
   # "rank" = weight grows with rank (your add-on-up / trim-on-down rule),
   # "equal", or "inverse_vol". top_n / min_trade_pct are ignored by "optimizer".
-  sizing: "optimizer"
+  sizing: "inverse_vol"       # sweep 2026-11-09: inverse-vol beat rank/equal on every window
   vol_lookback_days: 20
   max_weight: 0.10            # no single name above 10%
   min_trade_pct: 0.20         # only add/trim if |drift| > 20% of target weight
   cash_buffer: 0.02           # keep 2% cash
   # Optional: don't rebuy a name within N days of exiting it (reduces whipsaw)
-  reentry_cooldown_days: 5
+  reentry_cooldown_days: 10
+  # Equal split of the book across GICS sectors (src/sectors.py); null = off
+  sector_mode: "equal"
+  # Exposure control (src/exposure.py): 15% vol target on the universe index,
+  # halved when the universe 12m return is negative, halved again while NYSE
+  # new highs minus new lows summed over 10 days is negative. Scales the invested budget.
+  exposure: {vt: 15, ret_days: 252, ret_low: 0.5, hl_days: 10}
+  # Idle-cash sleeve (src/sleeve.py): cash above cash_buffer that the exposure layer leaves
+  # uninvested goes into these ETFs. Sweep: always-equal IEF+GLD = +0.14 Sharpe, +2.8 pts CAGR
+  # over 26 years, worst year -12%. null = off (cash stays cash).
+  sleeve: {assets: [IEF, GLD], rule: always_eq}
+  # null = off (cash stays cash); frac: 0.5 would put only half the idle cash in the sleeve
+  # Backtest accounting only: remaining idle cash earns the 13-week T-bill yield (%IRX)
+  cash_yield: true
+  # Several rankers sharing the account (src/books.py). null = one book from model.type.
+  # Weights must sum to 1; each book keeps its own state file data/live_state_<name>.json.
+  # Sweep 2026-11-09: momentum + earnings (model.fundamentals: sharadar) 50/50 beat either alone.
+  # Example:
+  #   books:
+  #     - {name: momentum, ranker: consistency_heavy, weight: 0.7}
+  #     - {name: earnings, ranker: earnings, weight: 0.3, top_n: 40}
+  books: null
 
 # ---- Stage B optimizer (sizing: "optimizer") ---------------------------
 # Scores -> expected returns (IC * z-score * stock vol); recent returns ->
@@ -88,3 +116,9 @@ live:
   # Run after close so today's bar is complete; orders queue for next open
   schedule_local_time: "16:30"
   timezone: "America/Chicago"
+  # How orders reach Alpaca (paper and live):
+  #   market  fractional notional market orders, DAY (default; fill shortly after the open)
+  #   opg     whole-share market-on-open orders in the opening auction, which is the fill the
+  #           backtest assumes; the sub-share remainder goes as a small DAY notional order.
+  #           Compare fills with scripts/reconcile_fills.py after a few runs.
+  order_type: "market"

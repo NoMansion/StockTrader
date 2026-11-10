@@ -78,3 +78,26 @@ def test_drift_weights_sums_consistently():
     # portfolio grew by 0.5*0.1 - 0.3*0.1 = +2%
     assert d["A"] == pytest.approx(0.55 / 1.02)
     assert d["B"] == pytest.approx(0.27 / 1.02)
+
+
+def test_equal_sector_mode_takes_best_per_sector_then_fills_from_ranking():
+    sectors = {"A": "Tech", "B": "Tech", "C": "Tech", "D": "Energy", "E": "Energy", "F": "Health", "G": "Health", "U": "Unknown"}
+    rules = Rules(top_n=5, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="equal", sectors=sectors)
+    s = _scores({"A": 9, "B": 8, "C": 7, "U": 6.5, "D": 6, "E": 5, "F": 4, "G": 3})
+    w, trades, st = rebalance(s, None, rules, State(), T0)
+    # 5 // 3 sectors = 1 slot each -> A, D, F; the 2 leftover slots go to the best
+    # remaining names overall: B (8) and C (7). U (6.5, no sector) just misses.
+    assert set(w.index) == {"A", "D", "F", "B", "C"}
+
+
+def test_equal_sector_mode_without_sector_map_falls_back_to_top_n():
+    rules = Rules(top_n=2, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="equal", sectors=None)
+    s = _scores({"A": 3, "B": 2, "C": 1})
+    w, _, _ = rebalance(s, None, rules, State(), T0)
+    assert set(w.index) == {"A", "B"}
+
+
+def test_unknown_sector_mode_raises():
+    rules = Rules(top_n=2, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="cap", sectors={"A": "X"})
+    with pytest.raises(ValueError):
+        rebalance(_scores({"A": 3, "B": 2}), None, rules, State(), T0)

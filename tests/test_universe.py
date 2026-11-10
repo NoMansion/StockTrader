@@ -56,3 +56,26 @@ def test_optimizer_path_also_sells_non_members(synthetic_prices):
     w = res.weights.reindex(columns=close.columns).fillna(0.0)
     held_after = w.loc[close.index[401]:, ["T00", "T01", "T02", "T03", "T04"]]
     assert (held_after == 0).all().all()
+
+
+def test_liquidity_membership_uses_the_prices_it_is_given():
+    """Regression: a serial reverse-splitter has a huge split-adjusted price but a
+    sub-dollar raw price. Ranked on raw close x volume it must NOT be a member."""
+    idx = pd.date_range("2020-01-01", periods=60, freq="B")
+    raw = pd.DataFrame({"GOOD": 50.0, "JUNK": 0.01}, index=idx)
+    adj = pd.DataFrame({"GOOD": 50.0, "JUNK": 1e9}, index=idx)   # 1e11x of reverse splits
+    vol = pd.DataFrame({"GOOD": 1e6, "JUNK": 1e6}, index=idx)
+    m_raw = liquidity_membership(raw, vol, top_k=1, min_price=5.0, lookback=20)
+    m_adj = liquidity_membership(adj, vol, top_k=1, min_price=5.0, lookback=20)
+    assert bool(m_raw.iloc[-1]["GOOD"]) and not bool(m_raw.iloc[-1]["JUNK"])
+    assert bool(m_adj.iloc[-1]["JUNK"])   # this is the bug the dataset loader must avoid
+
+
+def test_clean_bars_drops_placeholder_prices():
+    from src.data import clean_bars
+    rows = [
+        {"date": "2024-01-02", "ticker": "X", "open": 1, "high": 1, "low": 1, "close": 1.0, "volume": 10, "adj_close": 1.0},
+        {"date": "2024-01-03", "ticker": "X", "open": 1, "high": 1, "low": 1, "close": 0.000001, "volume": 0, "adj_close": 0.000001},
+    ]
+    out = clean_bars(pd.DataFrame(rows))
+    assert len(out) == 1 and out["close"].iloc[0] == 1.0

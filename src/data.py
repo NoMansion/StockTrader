@@ -133,7 +133,9 @@ def clean_bars(bars: pd.DataFrame) -> pd.DataFrame:
     for c in ["open", "high", "low", "close", "volume", "adj_close"]:
         b[c] = pd.to_numeric(b[c], errors="coerce").astype("float64")   # never let object dtype through
     b = b.dropna(subset=["close", "adj_close"])
-    b = b[(b["close"] > 0) & (b["adj_close"] > 0)]
+    # Norgate stores 0.000001 as a "no trade" placeholder on some OTC names;
+    # a bar at that price is not a price, and the return off it is +1e8%.
+    b = b[(b["close"] > 1e-4) & (b["adj_close"] > 0)]
     # bad prints: high < low or close outside [low, high]
     ok = (b["high"] >= b["low"]) & (b["close"] <= b["high"] * 1.0001) & (b["close"] >= b["low"] * 0.9999)
     b = b[ok]

@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .env
+data/
 data/*.parquet
 data/*.attempted.json
 data/*.json
@@ -9,3 +10,4 @@ data/*.csv
 data/*.log
 .pytest_cache/
 _to_delete/
+bash.exe.stackdump

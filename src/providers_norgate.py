@@ -31,6 +31,18 @@ def _nd():
     return norgatedata
 
 
+def _database_symbols(nd, db: str, attempts: int = 6, wait_s: float = 10.0):
+    """NDU occasionally returns None (busy with its own update); retry briefly."""
+    import time
+    for k in range(attempts):
+        syms = nd.database_symbols(db)
+        if syms is not None:
+            return syms
+        if k < attempts - 1:
+            time.sleep(wait_s)
+    raise RuntimeError(f"Norgate returned no symbols for {db!r} after {attempts} attempts; is NDU running?")
+
+
 def list_symbols(include_delisted: bool = True, common_stock_only: bool = True) -> list[str]:
     """All US symbols (active + delisted). With `common_stock_only`, keeps only
     operating/holding companies: drops ETFs/ETNs, closed-end & investment
@@ -43,9 +55,9 @@ def list_symbols(include_delisted: bool = True, common_stock_only: bool = True) 
     "Operating/Holding Company" from "Special Purpose Company" (SPAC),
     "Investment Company", "Warrant (Company Issued)", "Preferred", etc."""
     nd = _nd()
-    syms = list(nd.database_symbols(DB_ACTIVE))
+    syms = list(_database_symbols(nd, DB_ACTIVE))
     if include_delisted:
-        syms += list(nd.database_symbols(DB_DELISTED))
+        syms += list(_database_symbols(nd, DB_DELISTED))
     syms = sorted(set(syms))
     if not common_stock_only:
         return syms
@@ -116,6 +128,19 @@ def fetch_bars(symbols: list[str], start: str, end: str | None = None) -> pd.Dat
     if not frames:
         return pd.DataFrame(columns=COLS + ["assetid"])
     return pd.concat(frames, ignore_index=True)
+
+
+def fetch_series(symbols: list[str], start: str = "1990-01-01") -> pd.DataFrame:
+    """Daily closes of Norgate index / breadth / economic series ('#NYSEHI', '#NYSEAD', '$VIX', ...),
+    one column per symbol, unpadded (each series on its own calendar)."""
+    nd = _nd()
+    out = {}
+    for s in symbols:
+        d = nd.price_timeseries(s, padding_setting=nd.PaddingType.NONE, start_date=start, timeseriesformat="pandas-dataframe")
+        ser = d.rename(columns=str.lower)["close"].astype("float64")
+        ser.index = pd.to_datetime(ser.index).tz_localize(None).normalize()
+        out[s] = ser
+    return pd.DataFrame(out)
 
 
 def security_master(symbols: list[str]) -> pd.DataFrame:

@@ -70,4 +70,4 @@ def apply_membership(scores: pd.Series, membership: pd.DataFrame | None, date: p
     if membership is None or date not in membership.index:
         return scores
     ok = membership.loc[date]
-    return scores[scores.index.isin(ok[ok].index)]
+    return scores[ok.reindex(scores.index, fill_value=False).to_numpy()]

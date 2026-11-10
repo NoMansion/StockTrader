@@ -39,8 +39,12 @@ def load_dataset(cfg: dict, provider: str | None = None, refresh: bool = False):
     close, volume, raw_close = to_wide(bars, "adj_close"), to_wide(bars, "volume"), to_wide(bars, "close")
 
     if mode == "liquidity":
+        # Rank on RAW close x raw volume. Split-adjusted close x unadjusted
+        # volume is meaningless, and for serial reverse-splitters the adjusted
+        # price is inflated by orders of magnitude, which pulled sub-dollar
+        # pink-sheet names into the "most liquid 1000" and past the price floor.
         membership = liquidity_membership(
-            close, volume, top_k=d.get("liquidity_top_k", 500), min_price=d.get("min_price", 5.0),
+            raw_close, volume, top_k=d.get("liquidity_top_k", 500), min_price=d.get("min_price", 5.0),
         )
         if provider == "norgate":
             # drop days where a name was only OTC-listed (Platinum includes those)

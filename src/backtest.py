@@ -17,6 +17,7 @@ after-cost Sharpe. Only past data is used, so the choice is walk-forward.
 """
 from __future__ import annotations
 
+from bisect import bisect_right
 from dataclasses import dataclass, field, replace
 from itertools import product
 
@@ -41,6 +42,7 @@ class AutoTune:
 @dataclass
 class BacktestConfig:
     ranker: str = "momentum"
+    ranker_weights: dict | None = None     # for ranker == "blend" (or to override a preset)
     horizon_days: int = 10
     retrain_every_days: int = 63
     train_window_days: int = 756
@@ -49,6 +51,8 @@ class BacktestConfig:
     cost_model: CostModel = field(default_factory=CostModel)
     auto_tune: AutoTune = field(default_factory=AutoTune)
     warmup_days: int = 260
+    sleeve: "SleeveConfig | None" = None     # idle-cash sleeve (src/sleeve.py); None = off
+    cash_yield: bool = False                 # idle cash earns the T-bill yield (accounting only)
     # legacy fields kept for CLI compatibility; mapped into cost_model if set
     slippage_bps: float | None = None
     commission_per_trade: float | None = None
@@ -125,24 +129,35 @@ def run_backtest(
     rules: Rules,
     cfg: BacktestConfig,
     membership: pd.DataFrame | None = None,
+    raw_close: pd.DataFrame | None = None,
+    exposure: pd.Series | None = None,
+    fundamentals: dict[str, pd.DataFrame] | None = None,
 ) -> BacktestResult:
     """`membership` (optional): date x ticker booleans — the point-in-time
     universe. Only members on a date can be scored or bought; the benchmark
-    is the equal-weight return of that day's members."""
+    is the equal-weight return of that day's members.
+    `raw_close` (optional): unadjusted close for dollar-volume (ADV / cost
+    model); defaults to `close`.
+    `fundamentals` (optional): {feature: date x ticker panel} from src/fundamentals.py,
+    added to the feature set (needed by the "earnings" ranker)."""
     from .universe import apply_membership
 
     close = close.sort_index()
     volume = volume.reindex_like(close)
+    px = raw_close.reindex_like(close) if raw_close is not None else close
     if membership is not None:
         membership = membership.reindex(index=close.index, columns=close.columns).ffill().fillna(False).astype(bool)
 
     rets = close.pct_change()
-    feats = compute_features(close, volume)
+    feats = compute_features(close, volume, raw_close=px, fundamentals=fundamentals)
     labels = forward_excess_return(close, cfg.horizon_days)
+    feat_dates = set(feats.index.unique(level="date"))
+    label_dates = set(labels.index.unique(level="date"))
+    bench_all = (rets.where(membership) if membership is not None else rets).mean(axis=1)
     vol = realized_vol(close, 20)
-    adv = dollar_adv(close, volume, 60)
+    adv = dollar_adv(px, volume, 60)
     sigma20 = rets.rolling(20).std()
-    ranker = make_ranker(cfg.ranker)
+    ranker = make_ranker(cfg.ranker, cfg.ranker_weights) if cfg.ranker_weights else make_ranker(cfg.ranker)
     cm = cfg.cost_model
 
     dates = close.index
@@ -151,14 +166,16 @@ def run_backtest(
     last_train_i = -10**9
     trained = not ranker.needs_training
     ic_hist: dict[int, float] = {}
+    ic_keys: list[int] = []          # finite IC observations in day order (for the trailing mean)
+    ic_vals: list[float] = []
     score_hist: dict[pd.Timestamp, pd.Series] = {}
     cov_lb = rules.optimizer.cov_lookback if rules.optimizer else 120
     tune = cfg.auto_tune
     tuned = (rules.optimizer.risk_aversion, rules.optimizer.tc_multiplier) if rules.optimizer else (np.nan, np.nan)
 
     def trailing_ic(i: int) -> float:
-        ok = [v for k, v in ic_hist.items() if k <= i - cfg.horizon_days and np.isfinite(v)]
-        return float(np.mean(ok[-126:])) if len(ok) >= 20 else np.nan
+        n = bisect_right(ic_keys, i - cfg.horizon_days)
+        return float(np.mean(ic_vals[max(0, n - 126):n])) if n >= 20 else np.nan
 
     def maybe_autotune(i: int):
         nonlocal rules, tuned
@@ -197,22 +214,31 @@ def run_backtest(
 
         # ---- drift + P&L
         w_prev = state.weights
-        day_ret = float((w_prev * rets.loc[t].reindex(w_prev.index).fillna(0)).sum()) if not w_prev.empty else 0.0
-        bench = float(rets.loc[t][membership.loc[t]].mean()) if membership is not None else float(rets.loc[t].mean())
-        state.weights = drift_weights(w_prev, rets.loc[t])
+        r_t = rets.iloc[i]
+        day_ret = float((w_prev * r_t.reindex(w_prev.index).fillna(0)).sum()) if not w_prev.empty else 0.0
+        bench = float(bench_all.iloc[i])
+        state.weights = drift_weights(w_prev, r_t)
 
         # ---- rebalance on schedule
         turnover, cost, ic = 0.0, 0.0, np.nan
         if (i - cfg.warmup_days) % cfg.rebalance_every_days == 0:
-            f_t = feats.xs(t, level="date") if t in feats.index.get_level_values("date") else pd.DataFrame()
+            f_t = feats.xs(t, level="date") if t in feat_dates else pd.DataFrame()
             if not f_t.empty:
                 scores = apply_membership(ranker.score(f_t), membership, t)
                 score_hist[t] = scores
-                if t in labels.index.get_level_values("date"):
+                if t in label_dates:
                     ic = information_coefficient(scores, labels.xs(t, level="date"))
                     ic_hist[i] = ic
+                    if np.isfinite(ic):
+                        ic_keys.append(i)
+                        ic_vals.append(float(ic))
                 ret_win = rets.iloc[max(0, i - cov_lb + 1): i + 1] if rules.sizing == "optimizer" else None
-                new_w, trades, state = rebalance(scores, vol.loc[t], rules, state, t, returns_window=ret_win,
+                r_t = rules
+                if exposure is not None:
+                    # market-regime scaling: exposure in [0, 1] shrinks the invested budget
+                    e = float(exposure.get(t, 1.0))
+                    r_t = replace(rules, cash_buffer=1.0 - e * (1.0 - rules.cash_buffer))
+                new_w, trades, state = rebalance(scores, vol.loc[t], r_t, state, t, returns_window=ret_win,
                                                  ic=trailing_ic(i), adv=adv.loc[t], cost_model=cm)
                 turnover = float(trades.abs().sum())
                 cost = cm.trade_cost(trades, adv.loc[t], sigma20.loc[t])
@@ -226,4 +252,11 @@ def run_backtest(
     daily = pd.DataFrame(rows).set_index("date")
     weights = pd.DataFrame(weight_rows).T.fillna(0.0).sort_index()
     trades = pd.DataFrame(trade_rows)
-    return BacktestResult(daily=daily, weights=weights, trades=trades, tune_log=pd.DataFrame(tune_rows))
+    result = BacktestResult(daily=daily, weights=weights, trades=trades, tune_log=pd.DataFrame(tune_rows))
+    if cfg.sleeve is not None or cfg.cash_yield:
+        from .sleeve import apply_cash_yield, apply_sleeve
+        if cfg.sleeve is not None:
+            result = apply_sleeve(result, rules.cash_buffer, cfg.sleeve)
+        if cfg.cash_yield:
+            result = apply_cash_yield(result)
+    return result
