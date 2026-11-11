@@ -10,12 +10,15 @@ data:
   # "norgate"   = point-in-time index constituents incl. delisted (Platinum+)
   # "static"    = hand list in universe.py (or universe_csv) — survivorship-biased
   universe: "liquidity"
-  liquidity_top_k: 1000          # universe = top-1000 by dollar volume; the band below picks ranks 451-1000
+  liquidity_top_k: 1000          # universe = top-1000 by dollar volume; the band below picks ranks 201-1000
   # Trade only liquidity ranks lo+1..hi of that universe (null = trade the whole top-K). The exposure
   # gates still read the full top-K index. Sweep 2026-11-10: the SUE + FCF-yield ranker on ranks
   # 451-1000 (1.06 stitched Sharpe, 0.89 over T-bills) beat the best top-450 model (1.00 / 0.84);
   # the same ranker on the top 450 scores 0.99, and the old leader on the band only 0.94.
-  liquidity_band: [450, 1000]
+  # Sweep 2026-11-11 (daily rebalance): a wider band with a few more names is a plateau - lower edge
+  # 100-300 x 45-55 names = 1.16-1.20 stitched vs 1.161 for ranks 451-1000 x 40. Ranks 201-1000 x 45
+  # (1.198, 2000s 1.303) also wins at 20 bps (1.058 vs 1.007) and on the 2- and 3-day schedules.
+  liquidity_band: [200, 1000]
   min_price: 5.0
   index_name: "Russell 1000"     # only used when universe: norgate
   universe_csv: null
@@ -25,6 +28,7 @@ model:
   # "momentum" (no ML baseline) or "lgbm"
   # Live since 2026-11-10 pm (sweep leader): 0.5*sue + 0.5*fcf_yield on liquidity ranks 451-1000, 40 names,
   # with a 25% sector cap since the evening of 2026-11-10 (portfolio.sector_mode; equal sector split before).
+  # Daily rebalancing since 2026-11-11 midday; ranks 201-1000 with 45 names since 2026-11-11 afternoon.
   # Previous paper models: "c189f_fcfy30" on the top 450 (2026-11-10 am), "consistency_heavy" before that.
   type: "sue_fcfy"
   # forward-return horizon the ML model is trained to predict (trading days)
@@ -41,7 +45,7 @@ model:
 
 # ---- Portfolio rules (your enter / add / trim / exit logic) -----------
 portfolio:
-  top_n: 40                   # hold the top-N ranked names (sweep 2026-11-10: 40 beat 55/70 on the band)
+  top_n: 45                   # hold the top-N ranked names (45 on ranks 201-1000; 40 was best on ranks 451-1000)
   # 1 = daily, 5 = weekly, 21 = monthly. Sweep 2026-11-11: averaged over every start day of the schedule,
   # stitched Sharpe is 1.161 / 1.119 / 1.094 / 1.088 / 1.073 for 1 / 2 / 3 / 4 / 5 days, and daily beat its
   # 3-day twin in 25 of 25 neighbouring setups. Daily trades ~30% more (18x vs 14x a year); its edge over
@@ -59,7 +63,7 @@ portfolio:
   reentry_cooldown_days: 10
   # Sector rule on the top-N selection (GICS level 1, src/sectors.py); null = off
   #   "equal"  equal number of names per sector, leftovers from the overall ranking
-  #   "cap"    plain ranking, but no sector takes more than sector_cap of the slots (0.25 = 10 of 40)
+  #   "cap"    plain ranking, but no sector takes more than sector_cap of the slots (0.25 = 11 of 45)
   # Sweep 2026-11-10 on the live ranker: cap 20% / 25% / 30% = 1.12 / 1.13 / 1.11 stitched Sharpe
   # vs 1.06 for "equal", 1.09 for no rule, 1.07 for a 15% cap. 25% is the centre of the plateau.
   sector_mode: "cap"

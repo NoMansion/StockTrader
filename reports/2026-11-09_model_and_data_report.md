@@ -279,3 +279,90 @@ Not worth it at this account size, with the reason:
 - **Switch.** No forced run: orders sent during market hours would fill at once and not at the next open. The scheduled 4:30 pm job on 2026-11-11 makes the change itself, since with a 1-day cadence every run with a new closing bar is a rebalance. `run_daily.py` now also holds when the data has no new bar since the last rebalance, so a late data update cannot cause a second trade on the same close. 95 tests pass.
 - **Take-profit and stop-loss rules (134 runs, 67 rules).** New sweep rule measured from the price on the day a stock was picked: sell after a set gain, a set loss, or a set fall from the high since purchase, optionally with a re-buy block. None helps. On the 3-day schedule the best are a 50% or 20% take profit at 1.140 and a 25% stop at 1.132, inside the noise shown above; tighter is steadily worse (take profit 10% / 5% / 3%: 1.079 / 1.062 / 0.987; stop 10% / 5% / 2%: 1.089 / 1.066 / 0.973; trailing 10% / 5% / 3%: 1.046 / 0.962 / 0.811; a 5% gain with a 3% loss: 0.810). Checked daily, every rule scores at or below plain daily rebalancing (30% take profit 1.151, 8% stop 1.104, 5% trailing stop 0.884). The older rolling-high stops score 0.983 to 1.077. The ranking already sells a stock when its earnings surprise and cash-flow yield stop ranking well; a price rule on top sells winners that still rank well and then buys them back.
 - **Leads, queued (54 runs).** With daily rebalancing the whole top 1000 with 55 names scores 1.195 (2010+ 1.160) but 1.251 in the 2000s, which fails the 2000s condition; a band starting at rank 200 scores 1.181 with 1.319 in the 2000s; a 30% and 40% minimum trade score 1.170 and 1.173 and trade less. Each is within 0.035 of the promoted model and gets a neighbour round before any decision.
+
+### 8.7 Check-in, 12:45 pm 2026-11-11: cost stress confirmed by full runs; a wider band looks better and is being confirmed
+
+**Health.** Three workers and the supervisor are up, nothing failed, 1,911 results, 5.8 GB of memory free. Two workers are on slow machine-learning runs, so the quick runs go through one worker for now.
+
+**Cost stress (round 34, 36 runs).** The full backtests reproduce the figures worked out by hand in 8.6 to three decimals:
+
+| Cost per trade | 15 bps | 20 bps | 30 bps |
+|---|---|---|---|
+| Daily | 1.084 | 1.007 | 0.853 |
+| 3-day, average of start days | 1.035 | 0.975 | 0.857 |
+
+Doubling the market-impact coefficient or the spread changes nothing, because the 10 bps floor is what every trade pays in these backtests.
+
+**Neighbours of the daily model (round 34, 54 runs).** Live model: 1.161 stitched, 1.293 in the 2000s, 12.7% CAGR.
+
+| Setup (all daily, 25% sector cap) | Stitched | 2000s | 2010+ | CAGR | Max drawdown | Trades per year |
+|---|---|---|---|---|---|---|
+| Live: ranks 451-1000, 40 names | 1.161 | 1.293 | 1.080 | 12.7% | -17.7% | 16.5x |
+| Ranks 201-1000, 40 names | 1.181 | 1.319 | 1.095 | 12.9% | -16.8% | 15.3x |
+| Ranks 201-1000, 45 names | 1.198 | 1.303 | 1.132 | 13.0% | -17.1% | 14.9x |
+| Ranks 201-1000, 50 names | 1.190 | 1.295 | 1.125 | 12.9% | -17.2% | 14.7x |
+| Ranks 101-1000, 55 names | 1.201 | 1.321 | 1.125 | 13.0% | -17.3% | 14.1x |
+| Whole top 1000, 55 names | 1.195 | 1.251 | 1.160 | 12.9% | -16.9% | 13.6x |
+| Live with a 40% no-trade band | 1.173 | 1.294 | 1.098 | 12.6% | -17.8% | 14.7x |
+| Live with an 80% no-trade band | 1.209 | 1.439 | 1.062 | 11.9% | -17.0% | 11.0x |
+
+- **Wider band, more names.** Starting the band at rank 101 to 251 and holding 45 to 55 names scores 1.18 to 1.20 across eight runs, with lower turnover. Four of them clear the promote rule on paper, by 0.035 to 0.040. That is inside the range where I require a confirmation round, and the four differ from each other only by noise, so nothing was promoted.
+- **Wider no-trade band.** The score rises steadily as positions are resized less often, but most of that is not a trading saving. A wide band also stops the stock book from growing back after the risk gates reopen, so the bond/gold share rises from 33% to 46% and CAGR falls to 11.9%. It is a quieter portfolio, not a better stock picker.
+- **Whole top 1000.** Still fails the 2000s condition (1.24 to 1.27 against 1.293).
+
+**Queued (round 35, 122 runs).**
+- The full grid of band start (rank 101 to 301) against 40 to 60 names, plus sector cap and no-trade band around the best points.
+- Robustness of ranks 201-1000 with 45 names: 20 bps cost, re-buy cooldown, 2- and 3-day schedules at every start day, equal sizing, no bond/gold sleeve.
+- A new resize rule that separates the two effects above: a position is left alone while its own drift is small, but the whole book is rescaled when the risk budget moves by more than 5, 10 or 20%. The sweep code for it passed a 400-case check against the existing rule.
+
+If the grid is smooth I will promote the centre of the plateau, not its highest point. It would be a two-number config change.
+
+
+### 8.8 Wednesday 2026-11-11, mid afternoon: wider band promoted (ranks 201-1000, 45 names)
+
+**Round 35 (122 runs) confirmed the plateau.** Stitched Sharpe, all daily with a 25% sector cap (live 1.161):
+
+| Band starts after rank | 40 names | 45 | 50 | 55 | 60 |
+|---|---|---|---|---|---|
+| 100 | 1.144 | 1.164 | 1.202 | 1.201 | 1.178 |
+| 150 | 1.144 | 1.184 | 1.201 | 1.185 | 1.171 |
+| 200 | 1.181 | **1.198** | 1.190 | 1.187 | 1.183 |
+| 250 | 1.180 | 1.194 | 1.188 | 1.169 | 1.180 |
+| 300 | 1.169 | 1.181 | 1.189 | 1.193 | 1.157 |
+
+Every cell from 45 to 55 names beats the live model, and the surface is smooth.
+
+**Promoted: ranks 201-1000 with 45 names.** This was the setup chosen before the round for the full robustness battery, and it sits in the middle of the plateau. The neighbouring 50-name cell is 1.190, within noise of it.
+
+| Check | Candidate | Live (ranks 451-1000, 40) |
+|---|---|---|
+| Stitched Sharpe 2001-2026 | 1.198 | 1.161 |
+| Over T-bills | 1.032 | 0.996 |
+| 2000s out of sample | 1.303 | 1.293 |
+| 2010+ | 1.132 | 1.080 |
+| CAGR | 13.0% | 12.7% |
+| Max drawdown | -17.1% | -17.7% |
+| Worst year | -8.9% (2022) | -10.0% (2022) |
+| Turnover | 14.9x a year | 16.5x |
+| At 20 bps a trade | 1.058 | 1.007 |
+| 2-day schedule, mean of start days | 1.160 | 1.119 |
+| 3-day schedule, mean of start days | 1.133 | 1.094 |
+| SPY + gates + sleeve control | - | 0.885 |
+
+- **Exact replay:** both windows reproduce the stored daily series with zero difference.
+- **Budget:** stocks held the day before plus the bond/gold weight peak at 98.0%, never over 100%.
+- **Re-buy cooldown:** 5 or 20 days give 1.203 and 1.205, so the setting is not fragile.
+- **Year by year:** it beats the live model in 13 of 26 years, by 0.3 points a year on average. The gain is broad but small, as expected from a 0.04 Sharpe improvement.
+
+The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and `portfolio.top_n: 45`. The sector cap of 25% now allows 11 names per sector. It takes effect at the 16:30 scheduled job; there was no forced run during market hours.
+
+**Also read in round 35.**
+- **Resize rule** (leave a position alone while its own drift is small, rescale the book when the risk budget moves). The "same as today" setting reproduces the live model exactly (1.161). The best setting, 40% drift with a 20% budget band, scores 1.179, inside noise. Never resizing on own drift is clearly worse (1.06 to 1.11). Not adopted.
+- **Re-buy cooldown on the live model:** 0, 5 and 20 days give 1.153, 1.157 and 1.148 against 1.161 for 10 days, so it stays at 10.
+- **Wider no-trade band on the new setup:** a 40-50% band scores 1.209-1.213 but again shifts money into bonds and gold. Not adopted, for the reason given in 8.7.
+
+**Since 8.7.**
+- 316 queued tuning runs of the old top-450 momentum model were parked; their untested settings were moved onto the live model (round 37).
+- Rounds 38 (value, improving fundamentals, quality, an announcement-day surprise proxy, lottery stocks, overnight returns, calendar rules), 39 and 40 (factor momentum, sector-neutral ranks, regime switching, dip buying, decorrelation, lead-lag, pairs, sector-ETF rotation, risk parity, seasonality, market-cap sizing, fixed stock/bond splits and more) are built, tested and queued, about 500 runs.
+- **Blending whole models** (362,701 pairs and triples of the 40 most distinct models) does not beat the live model out of sample. A blend chosen on 2011+ scores 0.990 over T-bills in the 2000s, against 1.097 for the live model. The best in-sample blends mostly add bonds and gold.
+- **Staggered sub-portfolios** (2- to 5-day schedules, all start days averaged) never beat daily rebalancing, even at 20 bps.
