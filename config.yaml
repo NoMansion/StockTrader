@@ -42,7 +42,11 @@ model:
 # ---- Portfolio rules (your enter / add / trim / exit logic) -----------
 portfolio:
   top_n: 40                   # hold the top-N ranked names (sweep 2026-11-10: 40 beat 55/70 on the band)
-  rebalance_every_days: 3     # 1 = daily, 5 = weekly, 21 = monthly. Sweep 2026-11-09: 3 beat 1 (less churn, same return)
+  # 1 = daily, 5 = weekly, 21 = monthly. Sweep 2026-11-11: averaged over every start day of the schedule,
+  # stitched Sharpe is 1.161 / 1.119 / 1.094 / 1.088 / 1.073 for 1 / 2 / 3 / 4 / 5 days, and daily beat its
+  # 3-day twin in 25 of 25 neighbouring setups. Daily trades ~30% more (18x vs 14x a year); its edge over
+  # the 3-day average is +0.07 at the assumed 10 bps a trade, +0.03 at 20 bps, gone at ~30 bps.
+  rebalance_every_days: 1
   # "optimizer" = Stage B: the model decides count and size (see below)
   # "rank" = weight grows with rank (your add-on-up / trim-on-down rule),
   # "equal", or "inverse_vol". top_n / min_trade_pct are ignored by "optimizer".

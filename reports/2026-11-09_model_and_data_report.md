@@ -237,3 +237,45 @@ Not worth it at this account size, with the reason:
 - **Switch.** Real run at 4:08 am on the 2026-11-10 close, 11 minutes, memory floor 3.3 GB: the 98 orders queued at 5:07 pm were cancelled and replaced. Targets are 40 names at 31.3% (Financials at the 10-name cap), IEF 33.4%, GLD 33.4%, cash 2%. Two full exits (VMRK, AEP) were rejected because Alpaca had not finished releasing the shares held by the cancelled orders; they were resubmitted by hand together with an $0.84 leftover in STT, giving 99 open orders for the 2026-11-11 open. `AlpacaBroker.submit_targets` now waits until no order is open after cancelling. The state file was rebuilt from the account's actual holdings before the run, so no name carries a cooldown it did not earn. Next scheduled rebalance 2026-11-13.
 - **Interruptions.** The session dropped at 10:04 pm because the Claude desktop app updated itself and restarted, which killed a run five seconds in. Long runs are now launched detached with a memory log. The sweep was paused from 10:24 pm to 4:30 am at the user's request.
 - **Queue.** A 104-run honing round around the capped model is at the head of the queue: finer cap grid and an industry-group cap, 30 to 55 names, cadence, cooldown, minimum trade, exit bands, sizing, a 20% third factor (eight candidates), band edges, and the whole top 1000 with 40 to 100 names. 94 tests pass.
+
+### 8.5 Check-in, 8:45 am 2026-11-11: fills confirmed, honing round finished, daily rebalancing under test
+
+- **Fills.** All 99 orders filled between 8:30 and 8:35 am, none rejected, none left open, no symbol twice. The account holds 40 stocks at 31.3%, IEF 33.5%, GLD 33.3% and 2% cash; equity $99,768.
+- **Honing round (104 runs) finished, no promotion.** Almost everything around the live model lands at or below its 1.127: cap 22.5% / 27.5% / 35% score 1.129 / 1.125 / 1.106, 30 to 55 names 1.044 to 1.119 (40 remains a spike), cooldown 0 / 5 / 20 days 1.124 / 1.123 / 1.106, minimum trade 10% / 30% 1.117 / 1.130, exit bands 1.109 and 1.095, equal and rank sizing 1.085 and 1.041, every third factor 1.029 to 1.119, band lower edge 200 / 300 / 600 1.134 / 1.135 / 1.017. Removing the sleeve costs 0.06 and the cash yield 0.004.
+- **Three results reach the promote margin of 1.157 or come within 0.003 of it, and none is promoted yet.**
+
+  | Variant | Stitched | Excess | 2000s OOS | 2010+ | CAGR | Max DD | Worst year |
+  |---|---|---|---|---|---|---|---|
+  | Live: band, 40 names, 25% cap, 3-day cadence | 1.127 | 0.963 | 1.296 | 1.023 | 12.3% | −18.8% | −10.2% |
+  | Same, daily cadence | 1.161 | 0.996 | 1.293 | 1.080 | 12.7% | −17.7% | −10.0% |
+  | Whole top 1000, 55 names, 25% cap | 1.156 | 0.990 | 1.271 | 1.084 | 12.5% | −17.7% | −9.4% |
+  | Whole top 1000, 70 names, 25% cap | 1.154 | 0.986 | 1.276 | 1.077 | 12.4% | −18.0% | −8.4% |
+
+  The daily cadence clears the margin by 0.004, but its 2000s window is 0.003 below the live model's, it is a single knob, and the cadence response is not smooth: 1 / 2 / 3 / 4 / 5 days score 1.161 / 1.106 / 1.127 / 1.041 / 1.056. With the 20% cap, daily cadence added nothing (1.127 against 1.123). A zig-zag like that is what schedule-phase luck looks like: a 3-day schedule can start on any of three days, and the backtest only ever tested one of them. The two whole-universe results miss on the 2000s window.
+- **Confirmation round queued (88 runs, ahead of the ML queue).** A new sweep key shifts the rebalance schedule by N days, so every phase of the 2-, 3-, 4- and 5-day cadences is now run. That gives the phase spread, which is the real noise on the live 1.127 and the fair comparison for the daily cadence. Daily cadence is also rerun across caps, name counts, minimum trade, cooldown, exit band, band edges, volatility targets and without the sleeve; the whole-universe variants get their phases, a daily run and neighbours at 60 / 65 / 80 names.
+
+### 8.6 Check-in, 11 am 2026-11-11: daily rebalancing promoted; take-profit and stop-loss rules tested and rejected
+
+- **The schedule's start day matters more than the promote margin.** A 3-day schedule can start on any of three days; every backtest so far used the first. On the live model the three score 1.127, 1.092 and 1.063 stitched, so the live figure was the luckiest of the three and the fair figure is their mean, 1.094 (2000s window: 1.296, 1.214, 1.233, mean 1.248). A run with the same phase started three days later reproduces 1.127, which shows the spread comes from the schedule and not from the start date. Averaged over start days, faster is steadily better: 1 / 2 / 3 / 4 / 5 days score 1.161 / 1.119 / 1.094 / 1.088 / 1.073. The zig-zag reported in 8.5 was phase luck. A daily schedule has no start day to be lucky about.
+- **Daily rebalancing confirmed.** In 25 of 25 neighbouring setups the daily version scored at least as well as its 3-day twin (caps 20 to 30%, 35 to 50 names, minimum trade 10 and 30%, cooldown 0 / 5 / 20, exit band, band edges 200 and 300, volatility targets 12 and 20, 5% weight cap, a third factor, no sleeve, no cash yield, equal-sector and no sector rule, and the whole top 1000 with 55 and 70 names), typically by about 0.03, and those twins all use the lucky start day. Year by year it beats the 3-day mean in 21 of 26 years.
+
+  | Variant | Stitched | Excess | 2000s OOS | 2010+ | CAGR | Max DD | Worst year |
+  |---|---|---|---|---|---|---|---|
+  | 3-day, mean of the three start days | 1.094 | n/a | 1.248 | n/a | 11.9% | n/a | n/a |
+  | 3-day, start day 0 (the old live figure) | 1.127 | 0.963 | 1.296 | 1.023 | 12.3% | −18.8% | −10.2% |
+  | **Daily (promoted)** | **1.161** | 0.996 | 1.293 | 1.080 | 12.7% | −17.7% | −10.0% |
+
+  On the promote rule: the stitched margin is met against either baseline. The 2000s window is 0.003 below the start-day-0 figure and 0.045 above the mean of the start days; the live account's start day is arbitrary, so the mean is the comparison used.
+- **Trading cost is the risk, and it was stressed.** Daily trades 18 times the portfolio a year against 14 (2010 on; 14 against 11 in the 2000s), which is 1.80% against 1.39% a year at the assumed 10 bps per trade. The cost floor binds on every trade in these runs, so other cost levels follow exactly from the stored turnover:
+
+  | Cost per trade | 0 bps | 5 | 10 | 15 | 20 | 30 |
+  |---|---|---|---|---|---|---|
+  | Daily | 1.315 | 1.238 | 1.161 | 1.084 | 1.007 | 0.853 |
+  | 3-day, mean of start days | 1.213 | 1.153 | 1.094 | 1.035 | 0.976 | 0.857 |
+  | Difference | +0.102 | +0.085 | +0.067 | +0.049 | +0.031 | −0.004 |
+
+  The advantage survives a doubling of the assumed cost and disappears near 30 bps. Thirty-six queued runs repeat this through the backtest itself, and the morning's 99 fills will be compared with the official opens once the bars are in.
+- **Checks.** Both windows of the daily candidate replay with zero difference from the stored series. Stocks at the prior close plus the sleeve peak at 98.0%. No new code is needed for the model: `portfolio.rebalance_every_days` goes from 3 to 1.
+- **Switch.** No forced run: orders sent during market hours would fill at once and not at the next open. The scheduled 4:30 pm job on 2026-11-11 makes the change itself, since with a 1-day cadence every run with a new closing bar is a rebalance. `run_daily.py` now also holds when the data has no new bar since the last rebalance, so a late data update cannot cause a second trade on the same close. 95 tests pass.
+- **Take-profit and stop-loss rules (134 runs, 67 rules).** New sweep rule measured from the price on the day a stock was picked: sell after a set gain, a set loss, or a set fall from the high since purchase, optionally with a re-buy block. None helps. On the 3-day schedule the best are a 50% or 20% take profit at 1.140 and a 25% stop at 1.132, inside the noise shown above; tighter is steadily worse (take profit 10% / 5% / 3%: 1.079 / 1.062 / 0.987; stop 10% / 5% / 2%: 1.089 / 1.066 / 0.973; trailing 10% / 5% / 3%: 1.046 / 0.962 / 0.811; a 5% gain with a 3% loss: 0.810). Checked daily, every rule scores at or below plain daily rebalancing (30% take profit 1.151, 8% stop 1.104, 5% trailing stop 0.884). The older rolling-high stops score 0.983 to 1.077. The ranking already sells a stock when its earnings surprise and cash-flow yield stop ranking well; a price rule on top sells winners that still rank well and then buys them back.
+- **Leads, queued (54 runs).** With daily rebalancing the whole top 1000 with 55 names scores 1.195 (2010+ 1.160) but 1.251 in the 2000s, which fails the 2000s condition; a band starting at rank 200 scores 1.181 with 1.319 in the 2000s; a 30% and 40% minimum trade score 1.170 and 1.173 and trade less. Each is within 0.035 of the promoted model and gets a neighbour round before any decision.

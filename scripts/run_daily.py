@@ -111,7 +111,9 @@ def main():
     every = int(p.get("rebalance_every_days", 1))
     first_state = state_path((build_books(cfg) or [None])[0].name if build_books(cfg) else None)
     prev = last_rebalance(first_state)
-    if every > 1 and prev is not None and not args.force:
+    # With a daily cadence this still holds when the data has no new bar since the last rebalance (n == 0,
+    # e.g. the data vendor is late): trading again on the same close would only churn.
+    if prev is not None and not args.force:
         n = trading_days_since(close.index, prev, today)
         if n < every:
             print(f"Not a rebalance day: last rebalance {prev.date()}, {n} trading day(s) ago, cadence every {every}. Holding.")
