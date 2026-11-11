@@ -98,6 +98,29 @@ def test_equal_sector_mode_without_sector_map_falls_back_to_top_n():
 
 
 def test_unknown_sector_mode_raises():
-    rules = Rules(top_n=2, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="cap", sectors={"A": "X"})
+    rules = Rules(top_n=2, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="bogus", sectors={"A": "X"})
     with pytest.raises(ValueError):
         rebalance(_scores({"A": 3, "B": 2}), None, rules, State(), T0)
+
+
+def test_cap_sector_mode_limits_names_per_sector_and_keeps_rank_order():
+    sectors = {"A": "Tech", "B": "Tech", "C": "Tech", "D": "Energy", "E": "Energy", "F": "Health", "G": "Health"}
+    # top_n 4, cap 0.5 -> at most 2 names per sector; U1/U2/U3 have no sector and share one "Unknown" bucket
+    rules = Rules(top_n=4, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="cap", sector_cap=0.5, sectors=sectors)
+    s = _scores({"A": 9, "B": 8, "C": 7, "U1": 6.5, "U2": 6.4, "U3": 6.3, "D": 6, "E": 5, "F": 4, "G": 3})
+    w, _, _ = rebalance(s, None, rules, State(), T0)
+    # A, B fill Tech; C is skipped; U1, U2 fill the Unknown bucket and the book is full
+    assert set(w.index) == {"A", "B", "U1", "U2"}
+    # a cap below one slot still allows one name per sector
+    tight = Rules(top_n=3, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="cap", sector_cap=0.1, sectors=sectors)
+    w, _, _ = rebalance(s, None, tight, State(), T0)
+    assert set(w.index) == {"A", "U1", "D"}
+
+
+def test_cap_sector_mode_needs_a_valid_cap_and_falls_back_without_a_sector_map():
+    bad = Rules(top_n=2, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="cap", sectors={"A": "X"})
+    with pytest.raises(ValueError):
+        rebalance(_scores({"A": 3, "B": 2}), None, bad, State(), T0)
+    no_map = Rules(top_n=2, sizing="equal", max_weight=1.0, cash_buffer=0.0, sector_mode="cap", sector_cap=0.5, sectors=None)
+    w, _, _ = rebalance(_scores({"A": 3, "B": 2, "C": 1}), None, no_map, State(), T0)
+    assert set(w.index) == {"A", "B"}

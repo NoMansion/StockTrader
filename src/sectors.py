@@ -1,9 +1,11 @@
 """GICS sector lookup (level 1, e.g. "Information Technology") via Norgate,
 cached to JSON so the daily job only queries new tickers.
 
-Used by the "equal" sector_mode in portfolio.select_top: the Nov 2026 sweep
-found that forcing an equal number of names per sector raised holdout Sharpe
-from ~0.67 to ~0.74 and cut max drawdown, while sector caps did nothing.
+Used by the sector modes in portfolio.select_top. For the momentum rankers the
+Nov 2026 sweep found that forcing an equal number of names per sector ("equal")
+raised holdout Sharpe from ~0.67 to ~0.74 and cut max drawdown, while sector caps
+did nothing. For the SUE + FCF-yield ranker it is the other way round: a 20-30%
+cap ("cap") beat both the equal split and no sector rule.
 """
 from __future__ import annotations
 

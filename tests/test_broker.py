@@ -71,6 +71,28 @@ def test_submit_targets_cancels_stale_orders_sells_first_and_skips_rejections():
     assert len([o for o in orders if o["id"]]) == 2
 
 
+def test_submit_targets_waits_until_cancelled_orders_are_gone():
+    class _Slow(_StubClient):
+        """Old orders stay open for two polls after cancel_orders(), as on Alpaca."""
+        polls = 0
+
+        def get_orders(self):
+            self.polls += 1
+            assert self.cancelled == 1 and not self.submitted      # polled after the cancel, before any new order
+            return ["old order"] if self.polls <= 2 else []
+
+    client = _Slow(positions={"OLD": 10_000.0})
+    b = _broker(client)
+    b._wait_for_cancels = lambda: AlpacaBroker._wait_for_cancels(b, timeout_s=5.0, poll_s=0.01)
+    orders = b.submit_targets(pd.Series({"NEW": 0.10}))
+    assert client.polls == 3 and len(orders) == 2
+    # a cancel that never settles gives up after the timeout and still submits
+    stuck = _Slow(positions={})
+    stuck.cancelled = 1
+    stuck.get_orders = lambda: ["stuck"]
+    assert AlpacaBroker._wait_for_cancels(_broker(stuck), timeout_s=0.05, poll_s=0.01) is False
+
+
 def test_opg_orders_are_whole_shares_with_a_day_notional_remainder():
     import pytest
 

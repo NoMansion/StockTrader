@@ -81,6 +81,26 @@ def test_clean_bars_drops_placeholder_prices():
     assert len(out) == 1 and out["close"].iloc[0] == 1.0
 
 
+def test_trim_to_universe_drops_never_members_and_keeps_held_names(synthetic_prices):
+    from src.universe import trim_to_universe
+    close, volume = synthetic_prices
+    close = close.copy()
+    close["T00"] = 1.0; close["T01"] = 2.0                       # two penny stocks: never members
+    m = liquidity_membership(close, volume, top_k=10, min_price=5.0, lookback=20)
+    ever = set(m.columns[m.any(axis=0)])
+    never = [c for c in close.columns if c not in ever]
+    assert set(never) >= {"T00", "T01"}
+    c2, v2, r2, m2 = trim_to_universe(close, volume, close, m, keep={never[0], "NOT_IN_DATA"})
+    assert set(c2.columns) == ever | {never[0]}                  # never-members go, the held one stays
+    assert list(c2.columns) == list(v2.columns) == list(r2.columns) == list(m2.columns)
+    assert not m2[never[0]].any()                                # a kept name is still not a member
+    pd.testing.assert_frame_equal(m2[sorted(ever)], m[sorted(ever)])
+    # membership of the kept names is unchanged, so selection inside the universe is unchanged
+    assert (m2.sum(axis=1) == m.sum(axis=1)).all()
+    # no membership (static universe): nothing to trim
+    assert trim_to_universe(close, volume, None, None)[0] is close
+
+
 def test_trade_membership_keeps_only_the_liquidity_band(synthetic_prices):
     from src.universe import trade_membership
     close, volume = synthetic_prices

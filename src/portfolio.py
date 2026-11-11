@@ -37,7 +37,9 @@ class Rules:
     optimizer: "OptimizerConfig | None" = None   # used when sizing == "optimizer"
     # "equal": fill top_n with an equal number of names per sector (best-ranked
     # within each), remaining slots from the overall ranking. None = plain top-N.
+    # "cap": plain top-N, but no sector may take more than `sector_cap` of the slots.
     sector_mode: str | None = None
+    sector_cap: float | None = None                          # "cap" only, e.g. 0.25 = 10 of 40 names
     sectors: dict | None = field(default=None, repr=False)   # ticker -> sector name
 
 
@@ -95,9 +97,31 @@ def select_top(scores: pd.Series, rules: Rules, state: State, today: pd.Timestam
     s = s[~s.index.isin(blocked)]
     if rules.sector_mode == "equal" and rules.sectors:
         return _select_equal_sector(s, rules.top_n, rules.sectors)
-    if rules.sector_mode not in (None, "equal"):
+    if rules.sector_mode == "cap":
+        if rules.sector_cap is None or not 0 < rules.sector_cap <= 1:
+            raise ValueError(f"sector_mode 'cap' needs 0 < sector_cap <= 1, got {rules.sector_cap!r}")
+        if rules.sectors:
+            return _select_capped_sector(s, rules.top_n, rules.sectors, rules.sector_cap)
+    if rules.sector_mode not in (None, "equal", "cap"):
         raise ValueError(f"unknown sector_mode: {rules.sector_mode}")
     return s.head(rules.top_n)
+
+
+def _select_capped_sector(s: pd.Series, top_n: int, sectors: dict, cap_frac: float) -> pd.Series:
+    """Walk the ranking from the top and take a name unless its sector already holds
+    floor(cap_frac * top_n) slots (at least 1). Names with no sector share one "Unknown" bucket.
+    Sweep 2026-11-10: on the SUE + FCF-yield ranker a 20-30% cap beat both the equal split and no rule."""
+    cap = max(1, int(np.floor(cap_frac * top_n)))
+    counts: dict = {}
+    keep: list = []
+    for t in s.index:
+        g = sectors.get(t, "Unknown")
+        if counts.get(g, 0) < cap:
+            keep.append(t)
+            counts[g] = counts.get(g, 0) + 1
+        if len(keep) >= top_n:
+            break
+    return s.loc[keep]
 
 
 def _select_equal_sector(s: pd.Series, top_n: int, sectors: dict) -> pd.Series:

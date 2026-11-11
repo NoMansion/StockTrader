@@ -25,11 +25,12 @@ from src.costs import dollar_adv
 from src.dataset import load_dataset
 from src.exposure import exposure_series, scale_rules
 from src.features import compute_features, forward_excess_return, realized_vol
+from src.memguard import start_guard, stop_guard
 from src.providers_sharadar import fundamentals_from_config
 from src.portfolio import State, rebalance
 from src.ranking import make_ranker, trailing_ic
 from src.sectors import load_sectors
-from src.universe import apply_membership, trade_membership
+from src.universe import apply_membership, trade_membership, trim_to_universe
 
 STATE_PATH = Path("data/live_state.json")
 
@@ -80,6 +81,8 @@ def main():
 
     cfg = load_config()
     p, m = cfg["portfolio"], cfg["model"]
+    # stop this run (before any order) if the machine is about to run out of RAM; see src/memguard.py
+    guard = start_guard(cfg.get("live", {}).get("min_free_gb", 1.0))
     rules = build_rules(cfg)
     cost_model = build_cost_model(cfg)
     bt = BacktestConfig(ranker=m["type"], horizon_days=m["horizon_days"], train_window_days=m["train_window_days"])
@@ -92,6 +95,14 @@ def main():
         print(f"Using tuned settings from {last['date']}: risk_aversion={last['risk_aversion']}, tc_multiplier={last['tc_multiplier']}")
 
     close, volume, raw_close, membership = load_dataset(cfg, provider=args.provider, refresh=True)
+    # keep only names that were ever in the universe (plus anything still held): ~3x less memory, and the
+    # same ranking cross-section as the backtests that validated the model
+    held = set()
+    for bk in (build_books(cfg) or [None]):
+        held |= set(load_state(state_path(bk.name if bk else None)).weights.index)
+    n_all = close.shape[1]
+    close, volume, raw_close, membership = trim_to_universe(close, volume, raw_close, membership, keep=held)
+    print(f"Universe trim: {n_all} tickers loaded -> {close.shape[1]} ever-members kept", flush=True)
     gate_membership = membership                                          # exposure gates: full universe
     membership = trade_membership(cfg["data"], raw_close, volume, membership)   # ranking: liquidity band, if set
     today = close.index[-1]
@@ -104,6 +115,7 @@ def main():
         n = trading_days_since(close.index, prev, today)
         if n < every:
             print(f"Not a rebalance day: last rebalance {prev.date()}, {n} trading day(s) ago, cadence every {every}. Holding.")
+            stop_guard(guard)
             if not args.dry_run:
                 from src.broker import make_broker
                 from src.monitor import append_equity
@@ -201,6 +213,7 @@ def main():
 
     from src.broker import make_broker
     from src.monitor import append_equity, write_ranking
+    stop_guard(guard)   # the heavy work is done; never cut a run off while it is sending orders
     broker = make_broker("paper" if args.dry_run else "alpaca", order_type=cfg.get("live", {}).get("order_type", "market"))
     if args.dry_run:
         broker.mark(prices_today)

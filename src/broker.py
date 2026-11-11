@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -93,12 +94,29 @@ class AlpacaBroker:
     def equity(self) -> float:
         return float(self.client.get_account().equity)
 
+    def _wait_for_cancels(self, timeout_s: float = 30.0, poll_s: float = 1.0) -> bool:
+        """cancel_orders() returns before Alpaca has released the shares the old orders were holding. A
+        close_position sent in that gap is rejected with 40310000 "insufficient qty available"
+        (2026-11-11: two exits lost that way). Wait until no order is open, at most `timeout_s`."""
+        get_orders = getattr(self.client, "get_orders", None)
+        if get_orders is None:
+            return True
+        deadline = time.monotonic() + timeout_s
+        while True:
+            if not get_orders():                      # default filter: open orders only
+                return True
+            if time.monotonic() >= deadline:
+                print(f"  warning: orders still open {timeout_s:.0f}s after cancelling; exits of those names may be rejected")
+                return False
+            time.sleep(poll_s)
+
     def submit_targets(self, target_w: pd.Series, prices: pd.Series | None = None) -> list[dict]:
         from alpaca.trading.enums import OrderSide, TimeInForce
         from alpaca.trading.requests import MarketOrderRequest
 
         # stale unfilled orders from an earlier run would double up with today's deltas
         self.client.cancel_orders()
+        self._wait_for_cancels()
         eq = self.equity()
         cur = self.positions()
         orders = []

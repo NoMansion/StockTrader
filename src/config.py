@@ -36,7 +36,7 @@ def build_rules(cfg: dict[str, Any], top_n: int | None = None, sectors: dict | N
         top_n=top_n or p["top_n"], sizing=p["sizing"], max_weight=p["max_weight"],
         min_trade_pct=p["min_trade_pct"], cash_buffer=p["cash_buffer"],
         reentry_cooldown_days=p["reentry_cooldown_days"], optimizer=opt,
-        sector_mode=p.get("sector_mode"), sectors=sectors,
+        sector_mode=p.get("sector_mode"), sector_cap=p.get("sector_cap"), sectors=sectors,
     )
 
 

@@ -14,7 +14,7 @@ from src.config import build_backtest_config, build_rules, load_config
 from src.dataset import load_dataset
 from src.exposure import exposure_series
 from src.providers_sharadar import fundamentals_from_config
-from src.universe import trade_membership
+from src.universe import trade_membership, trim_to_universe
 from src.ranking import BLENDS
 from src.sectors import load_sectors
 
@@ -22,8 +22,8 @@ from src.sectors import load_sectors
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default=None, choices=[None, "momentum", "lgbm", *BLENDS])
-    ap.add_argument("--sector-mode", default=None, choices=[None, "equal", "none"],
-                    help="override portfolio.sector_mode ('none' disables it)")
+    ap.add_argument("--sector-mode", default=None, choices=[None, "equal", "cap", "none"],
+                    help="override portfolio.sector_mode ('none' disables it; 'cap' uses portfolio.sector_cap)")
     ap.add_argument("--provider", default=None, choices=[None, "yfinance", "tiingo", "norgate"])
     ap.add_argument("--universe", default=None, choices=[None, "static", "norgate", "liquidity"])
     ap.add_argument("--top-n", type=int, default=None)
@@ -51,6 +51,7 @@ def main():
     bt = build_backtest_config(cfg, ranker=args.model, rebalance=args.rebalance)
 
     close, volume, raw_close, membership = load_dataset(cfg, provider=args.provider)
+    close, volume, raw_close, membership = trim_to_universe(close, volume, raw_close, membership)   # as the sweep and the daily job do
 
     sectors = None
     if cfg["portfolio"].get("sector_mode"):

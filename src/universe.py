@@ -65,6 +65,25 @@ def liquidity_membership(close: pd.DataFrame, volume: pd.DataFrame, top_k: int =
     return (rank <= top_k).fillna(False)
 
 
+def trim_to_universe(close: pd.DataFrame, volume: pd.DataFrame, raw_close: pd.DataFrame | None,
+                     membership: pd.DataFrame | None, keep=()):
+    """Drop tickers that were never universe members (plus `keep`, e.g. names still held).
+
+    Two reasons. Memory: Norgate returns ~12,000 names since 2010 and the feature frame is built for every
+    column; untrimmed, the daily job ran a 16 GB machine out of memory and froze it (2026-11-11). Fidelity: the
+    sweep that validated the live model trims the same way, and percentile ranks and median fills are taken
+    over whatever columns are present, so the live ranking must see the same cross-section.
+    Returns (close, volume, raw_close, membership) restricted to the kept columns, in membership order."""
+    if membership is None:
+        return close, volume, raw_close, membership
+    ever = membership.any(axis=0)
+    cols = [c for c in ever[ever].index if c in close.columns]
+    seen = set(cols)
+    cols += [c for c in sorted(keep) if c not in seen and c in close.columns]
+    return (close[cols], volume[cols], raw_close[cols] if raw_close is not None else None,
+            membership.reindex(columns=cols, fill_value=False))
+
+
 def trade_membership(data_cfg: dict, raw_close: pd.DataFrame, volume: pd.DataFrame,
                      membership: pd.DataFrame | None) -> pd.DataFrame | None:
     """Apply `data.liquidity_band: [lo, hi]`: trade only liquidity ranks lo+1..hi of the top-`hi`

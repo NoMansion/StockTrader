@@ -23,7 +23,8 @@ data:
 # ---- Signal / model ---------------------------------------------------
 model:
   # "momentum" (no ML baseline) or "lgbm"
-  # Live since 2026-11-10 pm (sweep leader): 0.5*sue + 0.5*fcf_yield on liquidity ranks 451-1000, 40 names.
+  # Live since 2026-11-10 pm (sweep leader): 0.5*sue + 0.5*fcf_yield on liquidity ranks 451-1000, 40 names,
+  # with a 25% sector cap since the evening of 2026-11-10 (portfolio.sector_mode; equal sector split before).
   # Previous paper models: "c189f_fcfy30" on the top 450 (2026-11-10 am), "consistency_heavy" before that.
   type: "sue_fcfy"
   # forward-return horizon the ML model is trained to predict (trading days)
@@ -52,8 +53,13 @@ portfolio:
   cash_buffer: 0.02           # keep 2% cash
   # Optional: don't rebuy a name within N days of exiting it (reduces whipsaw)
   reentry_cooldown_days: 10
-  # Equal split of the book across GICS sectors (src/sectors.py); null = off
-  sector_mode: "equal"
+  # Sector rule on the top-N selection (GICS level 1, src/sectors.py); null = off
+  #   "equal"  equal number of names per sector, leftovers from the overall ranking
+  #   "cap"    plain ranking, but no sector takes more than sector_cap of the slots (0.25 = 10 of 40)
+  # Sweep 2026-11-10 on the live ranker: cap 20% / 25% / 30% = 1.12 / 1.13 / 1.11 stitched Sharpe
+  # vs 1.06 for "equal", 1.09 for no rule, 1.07 for a 15% cap. 25% is the centre of the plateau.
+  sector_mode: "cap"
+  sector_cap: 0.25
   # Exposure control (src/exposure.py): 15% vol target on the universe index,
   # halved when the universe 12m return is negative, halved again while NYSE
   # new highs minus new lows summed over 10 days is negative. Scales the invested budget.
@@ -127,3 +133,6 @@ live:
   #           backtest assumes; the sub-share remainder goes as a small DAY notional order.
   #           Compare fills with scripts/reconcile_fills.py after a few runs.
   order_type: "market"
+  # Memory guard (src/memguard.py): the daily job is stopped, before any order is sent, if free RAM
+  # falls below this many GB. An unguarded run froze the PC on 2026-11-11. null = off.
+  min_free_gb: 1.0

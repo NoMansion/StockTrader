@@ -114,6 +114,7 @@ BLENDS: dict[str, dict[str, float]] = {
     # Leader since 2026-11-10: earnings surprise + free-cash-flow yield, 50/50, traded on liquidity ranks
     # 451-1000 (data.liquidity_band) with 40 names. Stitched 26-yr Sharpe 1.06 / 11.1% CAGR / -19% drawdown
     # (0.89 excess over T-bills vs 0.84 for c189f_fcfy30 on the top 450). Needs model.fundamentals: sharadar.
+    # With a 25% sector cap instead of the equal sector split: 1.13 / 12.3% / -19% (0.96 excess).
     "sue_fcfy": {"sue": 0.5, "fcf_yield": 0.5},
 }
 
