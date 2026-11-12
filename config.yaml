@@ -10,7 +10,7 @@ data:
   # "norgate"   = point-in-time index constituents incl. delisted (Platinum+)
   # "static"    = hand list in universe.py (or universe_csv) — survivorship-biased
   universe: "liquidity"
-  liquidity_top_k: 1500          # universe = top-1500 by dollar volume; the band below picks ranks 201-1500
+  liquidity_top_k: 1000          # universe = top-1000 by dollar volume; the band below picks ranks 201-1000
   # Trade only liquidity ranks lo+1..hi of that universe (null = trade the whole top-K). The exposure
   # gates still read the full top-K index. Sweep 2026-11-10: the SUE + FCF-yield ranker on ranks
   # 451-1000 (1.06 stitched Sharpe, 0.89 over T-bills) beat the best top-450 model (1.00 / 0.84);
@@ -21,7 +21,10 @@ data:
   # Sweep 2026-11-12 (rounds 42/44, ranker sue_fcfy_q6): wider is better at every step - ranks 201-1000
   # 1.264 stitched, 201-1250 1.358, 201-1500 1.404 (2000s 1.638, CAGR 15.7%), 201-2000 1.466. At a flat
   # 20 bps a trade 201-1500 still scores 1.276 (201-1000: 1.124), at 30 bps 1.149 (0.985).
-  liquidity_band: [200, 1500]
+  # REVERTED the same day: the sweep's fundamentals covered only names ever in the top 1000 (2000-2026), so
+  # in those wider-universe backtests a rank-1200 stock had data only if it later grew into the top 1000
+  # (look-ahead). Ranks 201-1000 are unaffected. The wide results are being rerun on complete panels.
+  liquidity_band: [200, 1000]
   min_price: 5.0
   index_name: "Russell 1000"     # only used when universe: norgate
   universe_csv: null
