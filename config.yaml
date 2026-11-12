@@ -10,7 +10,7 @@ data:
   # "norgate"   = point-in-time index constituents incl. delisted (Platinum+)
   # "static"    = hand list in universe.py (or universe_csv) — survivorship-biased
   universe: "liquidity"
-  liquidity_top_k: 1000          # universe = top-1000 by dollar volume; the band below picks ranks 201-1000
+  liquidity_top_k: 1500          # universe = top-1500 by dollar volume; the band below picks ranks 201-1500
   # Trade only liquidity ranks lo+1..hi of that universe (null = trade the whole top-K). The exposure
   # gates still read the full top-K index. Sweep 2026-11-10: the SUE + FCF-yield ranker on ranks
   # 451-1000 (1.06 stitched Sharpe, 0.89 over T-bills) beat the best top-450 model (1.00 / 0.84);
@@ -18,7 +18,10 @@ data:
   # Sweep 2026-11-11 (daily rebalance): a wider band with a few more names is a plateau - lower edge
   # 100-300 x 45-55 names = 1.16-1.20 stitched vs 1.161 for ranks 451-1000 x 40. Ranks 201-1000 x 45
   # (1.198, 2000s 1.303) also wins at 20 bps (1.058 vs 1.007) and on the 2- and 3-day schedules.
-  liquidity_band: [200, 1000]
+  # Sweep 2026-11-12 (rounds 42/44, ranker sue_fcfy_q6): wider is better at every step - ranks 201-1000
+  # 1.264 stitched, 201-1250 1.358, 201-1500 1.404 (2000s 1.638, CAGR 15.7%), 201-2000 1.466. At a flat
+  # 20 bps a trade 201-1500 still scores 1.276 (201-1000: 1.124), at 30 bps 1.149 (0.985).
+  liquidity_band: [200, 1500]
   min_price: 5.0
   index_name: "Russell 1000"     # only used when universe: norgate
   universe_csv: null
@@ -47,7 +50,7 @@ model:
 
 # ---- Portfolio rules (your enter / add / trim / exit logic) -----------
 portfolio:
-  top_n: 45                   # hold the top-N ranked names (45 on ranks 201-1000; 40 was best on ranks 451-1000)
+  top_n: 45                   # hold the top-N ranked names (45 on ranks 201-1000 and 201-1500; 40 was best on ranks 451-1000)
   # 1 = daily, 5 = weekly, 21 = monthly. Sweep 2026-11-11: averaged over every start day of the schedule,
   # stitched Sharpe is 1.161 / 1.119 / 1.094 / 1.088 / 1.073 for 1 / 2 / 3 / 4 / 5 days, and daily beat its
   # 3-day twin in 25 of 25 neighbouring setups. Daily trades ~30% more (18x vs 14x a year); its edge over

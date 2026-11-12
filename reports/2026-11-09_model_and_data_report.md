@@ -411,3 +411,34 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
   - Strong but not adopted yet: an IEF/GLD sleeve weighted by risk parity (1.250, but 12.7% CAGR); buying new names only within 21 days of a filing (1.234); square-root-of-market-cap sizing (1.222); an Altman-Z distress screen (1.214); a 14-day minimum hold (1.213).
   - Combinations of all of these are queued in round 43.
   - "Combine everything" rankings, trend screens, macro betas, sector rotation and ML ranking targets all scored below the live model.
+
+
+### 8.12 Thursday 2026-11-12, 15:00: new leader, the same model on ranks 201-1500 (rounds 42 and 44)
+
+- **Promoted:** `data.liquidity_top_k: 1500` and `data.liquidity_band: [200, 1500]`. The ranking, the 45 names and every other setting are unchanged; only the universe grows by the next 500 most-traded stocks. It takes effect at the 16:30 scheduled job (no forced run during market hours).
+
+| | Stitched | Over T-bills | 2000s | 2010+ | CAGR | Max DD | Worst year |
+|---|---|---|---|---|---|---|---|
+| Live since this morning (ranks 201-1000) | 1.264 | 1.097 | 1.470 | 1.136 | 13.8% | -16.9% | -8.4% |
+| Ranks 201-1500 | 1.404 | 1.240 | 1.638 | 1.260 | 15.7% | -17.5% | -7.1% |
+
+- **Not a lone knob.** Wider is better at every step on this ranking (201-1250: 1.358, 201-1500: 1.404, 201-2000: 1.466) and on the old one (1.256 / 1.259 / 1.297 against 1.198).
+- **Costs.** The backtest's impact model barely charges small stocks at a $100k account (the 10 bps floor dominates: doubling the impact or the spread changes nothing), so the test that matters is a flat cost per trade:
+
+| Cost per trade | 201-1000 | 201-1500 |
+|---|---|---|
+| 10 bps (live fills so far: 9.6) | 1.264 | 1.404 |
+| 20 bps | 1.124 | 1.276 |
+| 30 bps | 0.985 | 1.149 |
+
+  Even at double the cost on every trade it matches the 201-1000 model at today's cost.
+- **Checks:** exact replay matches the stored run to the last digit. Stocks plus sleeve never exceed 100% (peak 98%). 99 tests pass.
+- **The daily job needed two fixes first.**
+  - Memory: the first dry run on 1,500 names passed 10 GB and was stopped by the memory guard. The job now computes features on the last 400 trading days instead of the whole history (live.feature_window_days, default 400). A ranking that scores each day on its own only needs today's row. On the real data, today's features match the full history to within float rounding, with identical scores and identical picks. The job now peaks at 4.7 GB on 1,500 names, against 7.2 GB before on 1,000.
+  - Network: a reset connection to Sharadar crashed the second dry run. Requests now retry dropped connections, timeouts, 429 and 5xx (waits of 5, 15, 45 and 120 s).
+- **Dry run (data to 2026-11-11):** 45 positions, 49 orders, estimated cost 3.2 bps, exposure 0.33 (32.0% stocks, 66.0% IEF/GLD), lowest free memory 6.3 GB.
+- **Round 43 (old ranker):** combinations of the round 40-41 knobs.
+  - Best: risk-parity sleeve + 21-day fresh entry + square-root sizing (1.327), risk parity + summer de-risking (1.325), risk parity + fresh entry (1.290). These are retested on the new model in round 44.
+- **Next:**
+  - Round 45 measures next-open execution. The backtest trades at the decision close, but live orders fill at the next open, so it removes the overnight move from every trade.
+  - Then the 201-2000 universe (its cost runs are queued).

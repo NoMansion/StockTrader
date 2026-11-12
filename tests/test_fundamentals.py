@@ -56,6 +56,38 @@ def test_round38_features_definitions():
     assert set(q.columns) >= {"sur", "ebitda_ev", "sp", "opprof", "roic", "fscore"}
 
 
+def test_sharadar_get_retries_dropped_connections(monkeypatch):
+    import requests
+    from src import providers_sharadar as ps
+
+    class Resp:
+        status_code, text = 200, "ticker,x\nAAA,1\n"
+        def raise_for_status(self):
+            pass
+    calls = []
+    def flaky(*a, **k):
+        calls.append(1)
+        if len(calls) < 3:
+            raise requests.ConnectionError("reset")
+        return Resp()
+    monkeypatch.setattr(ps.requests, "get", flaky)
+    monkeypatch.setattr(ps.time, "sleep", lambda s: None)
+    monkeypatch.setenv("SHARADAR_API_KEY", "test")
+    assert list(ps._get("fundamentals")["ticker"]) == ["AAA"] and len(calls) == 3
+
+    class Bad(Resp):
+        status_code = 403
+        def raise_for_status(self):
+            raise requests.HTTPError("403", response=self)
+    calls.clear()
+    monkeypatch.setattr(ps.requests, "get", lambda *a, **k: calls.append(1) or Bad())
+    try:
+        ps._get("fundamentals")
+        raise AssertionError("403 must not be retried")
+    except requests.HTTPError:
+        assert len(calls) == 1
+
+
 def test_round38_features_absent_without_their_columns():
     q = quarterly_features(_rows())
     assert "fscore" not in q.columns and "sue" in q.columns

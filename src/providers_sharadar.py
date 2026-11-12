@@ -15,6 +15,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import time
 import zipfile
 from pathlib import Path
 
@@ -34,11 +35,24 @@ def _key() -> str:
     return k
 
 
+RETRY_WAITS = (5, 15, 45, 120)   # seconds between attempts; a reset connection must not kill the daily job
+
+
 def _get(table: str, **params) -> pd.DataFrame:
-    """One page of a table as a DataFrame (CSV)."""
-    r = requests.get(f"{BASE}/data/{table}", params={**params, "format": "csv"}, headers={"x-api-key": _key()}, timeout=120)
-    r.raise_for_status()
-    return pd.read_csv(io.StringIO(r.text)) if r.text.strip() else pd.DataFrame()
+    """One page of a table as a DataFrame (CSV). Retries dropped connections, timeouts, 429 and 5xx."""
+    for attempt in range(len(RETRY_WAITS) + 1):
+        try:
+            r = requests.get(f"{BASE}/data/{table}", params={**params, "format": "csv"}, headers={"x-api-key": _key()}, timeout=120)
+            if r.status_code == 429 or r.status_code >= 500:
+                raise requests.HTTPError(f"HTTP {r.status_code}", response=r)
+            r.raise_for_status()
+            return pd.read_csv(io.StringIO(r.text)) if r.text.strip() else pd.DataFrame()
+        except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if attempt == len(RETRY_WAITS) or (status is not None and status < 500 and status != 429):
+                raise
+            print(f"Sharadar {table}: {type(e).__name__} {status or ''}, retry {attempt + 1} in {RETRY_WAITS[attempt]} s", flush=True)
+            time.sleep(RETRY_WAITS[attempt])
 
 
 def fetch_tickers(cache_dir: str | Path = "data", refresh: bool = False) -> pd.DataFrame:

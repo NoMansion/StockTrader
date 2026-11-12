@@ -72,6 +72,25 @@ def save_state(s: State, path: Path = STATE_PATH, rebalanced: pd.Timestamp | Non
     path.write_text(json.dumps(d, indent=2))
 
 
+def live_features(cfg: dict, rules, close, volume, raw_close, fund):
+    """Features for today's ranking. A ranker that scores each day on its own (no training, no optimizer IC) only
+    needs today's row, and every price feature looks back at most ~273 days, so the features are computed on the
+    last live.feature_window_days bars (default 400) instead of the whole history: same values on today's row, a
+    fraction of the memory (the full 2010+ frame for ranks 201-1500 needed > 10 GB). 0 = whole history."""
+    win = int((cfg.get("live") or {}).get("feature_window_days", 400) or 0)
+    books = build_books(cfg) or [single_book(cfg)]
+    needs_hist = rules.sizing == "optimizer" or any(
+        (make_ranker(b.ranker, b.ranker_weights) if b.ranker_weights else make_ranker(b.ranker)).needs_training for b in books)
+    if not win or needs_hist or len(close.index) <= win:
+        return compute_features(close, volume, raw_close=raw_close, fundamentals=fund)
+    cut = close.index[-win]
+    sl = lambda df: df.loc[cut:] if df is not None else None
+    print(f"Features on the last {win} bars (from {cut.date()})", flush=True)
+    # fundamentals panels stay whole: they are keyed by their own (filing) calendar and align_to_prices carries the
+    # last value before the window forward; slicing them would drop it
+    return compute_features(sl(close), sl(volume), raw_close=sl(raw_close), fundamentals=fund)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
@@ -144,7 +163,8 @@ def main():
         rules = scale_rules(rules, e)
         print(f"Exposure '{p['exposure']}': {e:.2f} -> invested budget {1 - rules.cash_buffer:.0%}")
 
-    feats = compute_features(close, volume, raw_close=raw_close, fundamentals=fundamentals_from_config(cfg, close, refresh=True))
+    fund = fundamentals_from_config(cfg, close, refresh=True)
+    feats = live_features(cfg, rules, close, volume, raw_close, fund)
     labels = forward_excess_return(close, bt.horizon_days)
     vol = realized_vol(close, p["vol_lookback_days"]).loc[today]
     adv_today = dollar_adv(raw_close, volume, 60).loc[today]
