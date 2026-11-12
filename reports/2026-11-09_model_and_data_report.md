@@ -366,3 +366,29 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
 - Rounds 38 (value, improving fundamentals, quality, an announcement-day surprise proxy, lottery stocks, overnight returns, calendar rules), 39 and 40 (factor momentum, sector-neutral ranks, regime switching, dip buying, decorrelation, lead-lag, pairs, sector-ETF rotation, risk parity, seasonality, market-cap sizing, fixed stock/bond splits and more) are built, tested and queued, about 500 runs.
 - **Blending whole models** (362,701 pairs and triples of the 40 most distinct models) does not beat the live model out of sample. A blend chosen on 2011+ scores 0.990 over T-bills in the 2000s, against 1.097 for the live model. The best in-sample blends mostly add bonds and gold.
 - **Staggered sub-portfolios** (2- to 5-day schedules, all start days averaged) never beat daily rebalancing, even at 20 bps.
+
+
+### 8.9 Wednesday 2026-11-11, 16:45: first run of the new model; real trading costs measured
+
+- **Scheduled job (16:30):** clean. Data as of 2026-11-11, 45 positions from ranks 201-1000, exposure 0.32 (31.7% stocks, 66.3% IEF/GLD), 48 market orders for the next open (20 buys, 28 sells). No symbol has two orders, every dropped name has a sell, every new name has a buy, and nothing was rejected. The sweep paused its workers from 16:24 to 16:40 as designed.
+- **Real fill costs (scripts/reconcile_fills.py, 224 fills, 9-11 November):** slippage against the official open averaged 9.6 bps weighted by size (median 0, mean 14.2), and 98% of orders filled within five minutes of the open. The backtests charge 10 bps a trade, so the cost assumption holds and the ranking of models stands.
+- **No new leader.** The best new-base result is a 5-day breadth gate at 1.225 stitched, under the 1.228 the rule needs, with a weaker 2000s score (1.230 against 1.303).
+- **Vol lookback not testable yet.** The backtest computes inverse-vol sizing on a fixed 20-day window (src/backtest.py), so the 10/40/60-day runs came out identical to the live model. Live trading reads the same 20 days from config.yaml, so live and backtest agree. Wiring the setting into the backtest is on the optimization list.
+
+
+### 8.10 Thursday 2026-11-12, 00:15: restart, strong signals, round 42
+
+- **PC restart 22:25-22:33.** Windows logged an unexpected shutdown with no crash code and a power-button press; the pagefile peaked at 826 MB, so memory was not the cause. The sweep does not restart itself after a reboot; it was relaunched at 00:11 (about 1.5 hours lost, three interrupted runs requeued). Registering sweep/start_sweep.ps1 as a logon task would make this automatic.
+- **Rounds 37-39 are complete on the new model.** Five changes clear the promote margin (live 1.198, so 1.228 is needed):
+
+| Change on the live model | Stitched | Over T-bills | 2000s | CAGR |
+|---|---|---|---|---|
+| + 20% revenue surprise | 1.259 | 1.093 | 1.434 | 13.7% |
+| Universe ranks 201-1500 | 1.259 | 1.096 | 1.430 | 14.0% |
+| + 20% EBITDA/EV | 1.242 | 1.078 | 1.410 | 13.7% |
+| + 20% sales/price | 1.234 | 1.073 | 1.437 | 13.8% |
+| + 20% operating profitability | 1.234 | 1.067 | 1.433 | 13.4% |
+
+  Alone, the same signals score only 0.94-1.03: they help as partners, not as strategies. About 200 variants have run on this base, so the best is expected to be around 0.06 above it by chance, which is where these sit. They go to a confirmation and combination round, not straight to the account. Ranks 201-750 score 1.170, so the gain is from adding the less liquid names, not from any band shape.
+- **Did not help (rounds 38-39 on the new model):** factor momentum (0.82-1.15), regime-switched rankings (0.97-1.14), sector-neutral ranks (1.06-1.15), score smoothing (1.04-1.14), buying on dips (1.13-1.17), the announcement-premium proxy (0.86-1.07), the strategy-equity gate (1.07-1.15). The member-rank control scores 1.179.
+- **Round 42 (270 runs):** every 2-, 3- and 4-signal combination of revenue surprise, EBITDA/EV, sales/price, operating profitability, ROIC and F-score at 20% and 40% of the ranking; each top signal at other weights; universe neighbours (201-1250 / 1500 / 2000, other edges and book sizes); pairs of the strong rules; combinations of signals with the wider universe. Strong results from rounds 40-41 join in round 43.
