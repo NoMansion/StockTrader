@@ -442,3 +442,14 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
 - **Next:**
   - Round 45 measures next-open execution. The backtest trades at the decision close, but live orders fill at the next open, so it removes the overnight move from every trade.
   - Then the 201-2000 universe (its cost runs are queued).
+
+
+### 8.13 Thursday 2026-11-12, 15:07: the ranks 201-1500 switch is reverted (look-ahead in the research data)
+
+- **What was wrong.** The research sweep's fundamentals panels were built only for stocks that were ever in the top 1000 by liquidity at some point between 2000 and 2026.
+  - In a top-1000 backtest that is harmless, because every member is in that set.
+  - In a wider universe it is look-ahead. A stock ranked 1,200 in 2005 had earnings and cash-flow data only if it later grew into the top 1000. Stocks that stayed small or failed got a neutral score and were almost never bought.
+  - The 201-1500 dataset has 4,343 stocks; only 2,308 of them had fundamentals.
+  - The "wider is better at every step" pattern in section 8.12 is therefore not trustworthy, and neither are the earlier wider-universe results (round 37 ranks to 1500, round 42 universe and cross runs, round 43 crosses with 201-1500).
+- **The live job was never affected the same way.** It loads fundamentals for every name, so the account would have traded a model different from the one backtested. Hence the revert before it ever traded: the account stays on sue_fcfy_q6, ranks 201-1000 (section 8.11). The memory fix and the Sharadar retries from 8.12 are kept; the windowed features were checked exact on ranks 201-1000.
+- **Fix in progress.** All fundamentals panels are being rebuilt for every one of the 16,853 Norgate names. The Sharadar extract already holds all 17,079 tickers; only the name list was restricted. The new panels are checked against the old ones on the top-1000 names, then every wider-universe test is rerun.
