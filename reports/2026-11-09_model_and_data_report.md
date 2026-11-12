@@ -453,3 +453,33 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
   - The "wider is better at every step" pattern in section 8.12 is therefore not trustworthy, and neither are the earlier wider-universe results (round 37 ranks to 1500, round 42 universe and cross runs, round 43 crosses with 201-1500).
 - **The live job was never affected the same way.** It loads fundamentals for every name, so the account would have traded a model different from the one backtested. Hence the revert before it ever traded: the account stays on sue_fcfy_q6, ranks 201-1000 (section 8.11). The memory fix and the Sharadar retries from 8.12 are kept; the windowed features were checked exact on ranks 201-1000.
 - **Fix in progress.** All fundamentals panels are being rebuilt for every one of the 16,853 Norgate names. The Sharadar extract already holds all 17,079 tickers; only the name list was restricted. The new panels are checked against the old ones on the top-1000 names, then every wider-universe test is rerun.
+
+
+### 8.14 Thursday 2026-11-12, 17:40: complete fundamentals panels; first clean results of round 46
+
+- **Daily job (16:30):** clean on ranks 201-1000. It used 17 features on the new 400-day window, a 32% stock budget, and placed 51 orders for the 11-13 open. No symbol was ordered twice, every dropped name has a sell and every new name has a buy.
+- **Panels rebuilt for every name.** The 43 fundamentals panels now cover 12,158 names, up from 3,065.
+  - On the 3,065 old names every value is identical (43 of 43 panels, zero difference, nothing gained or lost), so all ranks 201-1000 results stand.
+  - Point-in-time coverage of the wide universes, 2000-2010: the share of priced names with a cash-flow yield rises from 43-53% to 76-79%. That is in line with the live 1000-name cross-section (59% with a current earnings surprise).
+- **Wide universes requeued on the complete panels.** 66 variants are queued after round 46:
+  - first the universe ladder 201-1250 / 1500 / 1750 / 2000 / 2500 / 3000;
+  - then their 20/30 bps and next-open checks;
+  - then every parked combination.
+  
+  The 33 contaminated results are moved out of the leaderboard (sweep results_lookahead/).
+- **Next-open execution (round 45), ranks 201-1000:** filling at the next open instead of the decision close lowers the live model from 1.264 to 1.226. The timing gap is small.
+- **Round 46: the round 43 rules on the live ranker, ranks 201-1000.** Each rule alone, against the live 1.264:
+
+  | Rule | Stitched | 2000s |
+  |---|---|---|
+  | IEF/GLD sleeve by risk parity | 1.323 | 1.644 |
+  | Summer de-risking (May-Oct x0.75) | 1.307 | 1.544 |
+  | New names only within 21 days of a filing | 1.299 | 1.464 |
+  | Square-root market-cap sizing | 1.283 | 1.519 |
+  | Altman Z >= 1.81 screen | 1.282 | 1.473 |
+  | Minimum hold 14 days | 1.273 | 1.460 |
+
+  On the old ranker the combination of risk parity, fresh entry, square-root sizing and the Z screen scored 1.330, and 1.369 with revenue surprise. Not promoted yet, for three reasons:
+  - these are single-rule results;
+  - the combinations, cost and next-open runs are still queued;
+  - none of the rules exist in the live code yet. Each needs a port and a test against the sweep first.
