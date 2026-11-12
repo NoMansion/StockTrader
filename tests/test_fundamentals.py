@@ -30,6 +30,37 @@ def test_quarterly_features_definitions():
     assert q["sue"].notna().sum() > 0                                              # needs 8 quarters of changes
 
 
+def _rows38(n=16):
+    r = _rows(n)
+    r["revenue"] = np.linspace(100, 130, n)                 # growing revenue per share -> positive surprise
+    r["revenue"] += np.where(np.arange(n) % 2, 0.5, -0.5)   # wiggle so the 8-quarter std of the change is not 0
+    r = r.assign(sgna=10.0, intexp=2.0, ebit=20.0, ebitda=25.0, ev=1200.0, assetsc=150.0,
+                 liabilitiesc=np.linspace(100, 80, n), debt=100.0, debtnc=np.linspace(90, 70, n), invcap=500.0,
+                 shareswa=100.0)
+    return r
+
+
+def test_round38_features_definitions():
+    r = _rows38()
+    q = quarterly_features(r)
+    last = q.iloc[-1]
+    rev_ttm = r["revenue"].iloc[-4:].sum()
+    assert last["ebitda_ev"] == pytest.approx(100 / 1200)                           # ttm EBITDA / EV
+    assert last["sp"] == pytest.approx(rev_ttm / 1000)                              # ttm revenue / mcap
+    assert last["roic"] == pytest.approx(80 / 500)                                  # ttm EBIT / invested capital
+    assert last["opprof"] == pytest.approx((rev_ttm - 240 - 40 - 8) / 200)          # (rev - cogs - sga - int) / equity
+    assert last["sur"] > 0
+    # F-score: roa>0, cfo>0, cfo>roa, falling leverage, rising current ratio, falling shares, rising gross margin and
+    # asset turnover are true (8); roa is flat (netinc and assets constant) so its change is not > 0
+    assert last["fscore"] == 8
+    assert set(q.columns) >= {"sur", "ebitda_ev", "sp", "opprof", "roic", "fscore"}
+
+
+def test_round38_features_absent_without_their_columns():
+    q = quarterly_features(_rows())
+    assert "fscore" not in q.columns and "sue" in q.columns
+
+
 def test_quarterly_features_drops_irregular_spacing_and_short_histories():
     r = _rows(n=5)
     assert quarterly_features(r) is None

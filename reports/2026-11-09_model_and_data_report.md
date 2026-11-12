@@ -392,3 +392,22 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
   Alone, the same signals score only 0.94-1.03: they help as partners, not as strategies. About 200 variants have run on this base, so the best is expected to be around 0.06 above it by chance, which is where these sit. They go to a confirmation and combination round, not straight to the account. Ranks 201-750 score 1.170, so the gain is from adding the less liquid names, not from any band shape.
 - **Did not help (rounds 38-39 on the new model):** factor momentum (0.82-1.15), regime-switched rankings (0.97-1.14), sector-neutral ranks (1.06-1.15), score smoothing (1.04-1.14), buying on dips (1.13-1.17), the announcement-premium proxy (0.86-1.07), the strategy-equity gate (1.07-1.15). The member-rank control scores 1.179.
 - **Round 42 (270 runs):** every 2-, 3- and 4-signal combination of revenue surprise, EBITDA/EV, sales/price, operating profitability, ROIC and F-score at 20% and 40% of the ranking; each top signal at other weights; universe neighbours (201-1250 / 1500 / 2000, other edges and book sizes); pairs of the strong rules; combinations of signals with the wider universe. Strong results from rounds 40-41 join in round 43.
+
+
+### 8.11 Thursday 2026-11-12, 09:45: new leader, the quality/value tilt (round 42)
+
+- **Promoted:** `model.type: sue_fcfy_q6`. It keeps 80% of the live ranking (earnings surprise + free-cash-flow yield) and splits the other 20% equally over six signals: revenue surprise, EBITDA/EV, sales/price, operating profitability, ROIC and the Piotroski F-score. Everything else is unchanged (ranks 201-1000, 45 names, 25% sector cap, daily rebalance, IEF/GLD sleeve). It takes effect at the 16:30 scheduled job; there was no forced run during market hours.
+
+| | Stitched | Over T-bills | 2000s | 2010+ | CAGR | Max DD | Worst year |
+|---|---|---|---|---|---|---|---|
+| Live until today | 1.198 | 1.032 | 1.303 | 1.132 | 13.0% | -17.1% | -8.9% |
+| sue_fcfy_q6 | 1.264 | 1.097 | 1.470 | 1.136 | 13.8% | -16.9% | -8.4% |
+
+- **Why this one and not the top score.** Round 42 tried every 2-, 3- and 4-signal subset of the six at 20% and 40%. Nearly every 20% subset beats the live model (1.20 to 1.28 stitched), and the 40% versions are weaker, so a modest tilt is the robust finding. The best single subset (EBITDA/EV + sales/price + operating profitability + ROIC, 1.280) is within noise of the others; picking it would mostly be picking luck. The all-six version needs no choice among subsets and sits in the middle of that plateau. At 30% and 40% it scores 1.262 and 1.252.
+- **Checks:** beats the live model in 19 of 26 years (by 0.7 points a year on average; worst year -3.8 points, 2021). Exact replay matches the stored run to the last digit. Stocks plus sleeve never exceed 100% (peak 98%).
+- **Port to the live code:** the six signals existed only in the research sweep. They are now in src/fundamentals.py with definitions identical to the sweep's: 281 random companies matched on every daily value. The quarterly cache was refetched once with the 11 extra Sharadar columns it needs (518,253 rows, 9,484 tickers, 3.6 minutes). An old cache without them is refetched automatically. New unit tests check the definitions; 97 tests pass.
+- **Dry run (data to 2026-11-11):** 45 positions, 53 orders, estimated cost 1.0 bps, exposure 0.32 (31.7% stocks, 66.3% IEF/GLD). The daily job now peaks at 7.2 GB instead of 5-6 GB; the lowest free memory during the run was 4.2 GB.
+- **Also from rounds 40-41 (on the old ranker):**
+  - Strong but not adopted yet: an IEF/GLD sleeve weighted by risk parity (1.250, but 12.7% CAGR); buying new names only within 21 days of a filing (1.234); square-root-of-market-cap sizing (1.222); an Altman-Z distress screen (1.214); a 14-day minimum hold (1.213).
+  - Combinations of all of these are queued in round 43.
+  - "Combine everything" rankings, trend screens, macro betas, sector rotation and ML ranking targets all scored below the live model.

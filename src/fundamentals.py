@@ -12,21 +12,70 @@ Shared by the research sweep and the live pipeline so both use one definition:
     buyback       minus the change in basic shares vs a year earlier
     roe           trailing-4Q net income / book equity
     fcf_assets    trailing-4Q free cash flow / total assets
+  round 38 sweep features (definitions identical to the sweep's sharadar_build3.py):
+    sur           revenue surprise: revenue per share minus four quarters earlier, scaled like sue
+    ebitda_ev     trailing-4Q EBITDA / enterprise value
+    sp            trailing-4Q revenue / market cap
+    opprof        trailing-4Q (revenue - COGS - SG&A - interest) / book equity
+    roic          trailing-4Q EBIT / invested capital
+    fscore        Piotroski F-score (0-9)
 
 A value becomes known on its filing date (`avail`) and expires EXPIRE_DAYS later if nothing
 newer arrived. Input rows follow Sharadar's SF1 ARQ column names (one row per fiscal quarter):
     reportperiod, date (filing date), eps, epsdil, revenue, cor, netinc, netinccmn, ncfo, fcf,
-    assets, equity, marketcap, sharesbas
+    assets, equity, marketcap, sharesbas, plus (round 38 features) sgna, intexp, ebit, ebitda, ev,
+    assetsc, liabilitiesc, debt, debtnc, invcap, shareswa
 """
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
 
-FEATURES = ("sue", "gprof", "ni_growth", "accruals", "fcf_yield", "ep", "sales_growth", "asset_growth", "buyback", "roe", "fcf_assets")
+FEATURES_R38 = ("sur", "ebitda_ev", "sp", "opprof", "roic", "fscore")
+FEATURES = ("sue", "gprof", "ni_growth", "accruals", "fcf_yield", "ep", "sales_growth", "asset_growth", "buyback", "roe",
+            "fcf_assets") + FEATURES_R38
 EXPIRE_DAYS = 400
+R38_COLUMNS = ["sgna", "intexp", "ebit", "ebitda", "ev", "assetsc", "liabilitiesc", "debt", "debtnc", "invcap", "shareswa"]
 ARQ_COLUMNS = ["ticker", "dimension", "calendardate", "date", "reportperiod", "lastupdated", "eps", "epsdil", "netinc",
-               "netinccmn", "revenue", "cor", "ncfo", "fcf", "assets", "equity", "marketcap", "sharesbas"]
+               "netinccmn", "revenue", "cor", "ncfo", "fcf", "assets", "equity", "marketcap", "sharesbas"] + R38_COLUMNS
+
+
+def _nz(s: pd.Series) -> pd.Series:
+    return s.replace(0, np.nan)
+
+
+def _r38_features(d: pd.DataFrame) -> pd.DataFrame:
+    """The six round 38 features on the de-duplicated quarterly rows `d` (index reportperiod), exactly as the
+    sweep's sharadar_build3.py computes them."""
+    ttm = {n: d[n].rolling(4, min_periods=4).sum()
+           for n in ("revenue", "cor", "sgna", "intexp", "ebit", "ebitda", "netinc", "ncfo")}
+    assets = _nz(d["assets"]).ffill(limit=2)
+    mcap = _nz(d["marketcap"]).ffill(limit=2)
+    equity = d["equity"].where(d["equity"] > 0).ffill(limit=2)
+    ev = d["ev"].where(d["ev"] > 0).ffill(limit=2)
+    invcap = d["invcap"].where(d["invcap"] > 0).ffill(limit=2)
+    shares = _nz(d["shareswa"]).fillna(d["sharesbas"]).ffill(limit=2)
+    o = pd.DataFrame(index=d.index)
+    o["ebitda_ev"] = ttm["ebitda"] / ev
+    o["sp"] = ttm["revenue"] / mcap
+    rps = d["revenue"] / shares
+    chr_ = rps - rps.shift(4)
+    o["sur"] = chr_ / _nz(chr_.rolling(8, min_periods=6).std())
+    roa = ttm["netinc"] / assets
+    gm = (ttm["revenue"] - ttm["cor"]) / _nz(ttm["revenue"]).where(ttm["revenue"] > 0)
+    ato = ttm["revenue"] / assets
+    d_roa, d_gm, d_ato = roa - roa.shift(4), gm - gm.shift(4), ato - ato.shift(4)
+    cfo_a = ttm["ncfo"] / assets
+    lev_r = d["debtnc"].fillna(d["debt"]) / assets
+    cur = d["assetsc"] / _nz(d["liabilitiesc"])
+    f = pd.DataFrame({"roa_pos": roa > 0, "cfo_pos": cfo_a > 0, "droa_pos": d_roa > 0, "accrual": cfo_a > roa,
+                      "dlev": lev_r < lev_r.shift(4), "dcur": cur > cur.shift(4),
+                      "noiss": d["sharesbas"] <= d["sharesbas"].shift(4), "dgm": d_gm > 0, "dato": d_ato > 0}, index=d.index)
+    ok = roa.notna() & roa.shift(4).notna() & cfo_a.notna()
+    o["fscore"] = f.sum(axis=1).astype("float64").where(ok)
+    o["roic"] = ttm["ebit"] / invcap
+    o["opprof"] = (ttm["revenue"] - ttm["cor"] - ttm["sgna"].fillna(0) - ttm["intexp"].fillna(0)) / equity
+    return o
 
 
 def quarterly_features(rows: pd.DataFrame) -> pd.DataFrame | None:
@@ -59,6 +108,10 @@ def quarterly_features(rows: pd.DataFrame) -> pd.DataFrame | None:
     out["buyback"] = -(t["shares"] / t["shares"].shift(4).replace(0, np.nan) - 1)
     out["roe"] = t["ni_ttm"] / equity
     out["fcf_assets"] = t["fcf_ttm"] / assets
+    if all(c in d.columns for c in R38_COLUMNS):
+        r38 = _r38_features(d)
+        for k in FEATURES_R38:
+            out[k] = r38[k]
     out = out.replace([np.inf, -np.inf], np.nan)
     out.index = pd.DatetimeIndex(t["avail"].values, name="avail")
     return out.sort_index()

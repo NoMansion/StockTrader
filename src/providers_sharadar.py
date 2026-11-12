@@ -121,6 +121,10 @@ def load_fundamentals(symbols: list[str], days: pd.DatetimeIndex, cache_dir: str
     wanted = sorted(set(mapping.values()))
     p = cache_dir / "sharadar_arq.pkl"
     rows = pd.read_pickle(p) if p.exists() else pd.DataFrame(columns=ARQ_COLUMNS)
+    if len(rows) and not set(ARQ_COLUMNS) <= set(rows.columns):
+        # cache written before ARQ_COLUMNS grew: an incremental refresh would never backfill the new columns
+        print(f"Sharadar cache lacks {sorted(set(ARQ_COLUMNS) - set(rows.columns))}: refetching all rows")
+        rows = pd.DataFrame(columns=ARQ_COLUMNS)
     have = set(rows["ticker"]) if len(rows) else set()
     new = [t for t in wanted if t not in have]
     parts = [rows]

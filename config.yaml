@@ -30,7 +30,9 @@ model:
   # with a 25% sector cap since the evening of 2026-11-10 (portfolio.sector_mode; equal sector split before).
   # Daily rebalancing since 2026-11-11 midday; ranks 201-1000 with 45 names since 2026-11-11 afternoon.
   # Previous paper models: "c189f_fcfy30" on the top 450 (2026-11-10 am), "consistency_heavy" before that.
-  type: "sue_fcfy"
+  # Since 2026-11-12: "sue_fcfy_q6" = sue_fcfy at 80% + 20% split over sur / ebitda_ev / sp / opprof / roic / fscore
+  # (needs the extra Sharadar columns; an old data/sharadar_arq.pkl is refetched once automatically).
+  type: "sue_fcfy_q6"
   # forward-return horizon the ML model is trained to predict (trading days)
   horizon_days: 10
   # walk-forward: retrain every N trading days on a trailing window

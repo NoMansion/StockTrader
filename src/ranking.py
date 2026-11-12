@@ -116,6 +116,12 @@ BLENDS: dict[str, dict[str, float]] = {
     # (0.89 excess over T-bills vs 0.84 for c189f_fcfy30 on the top 450). Needs model.fundamentals: sharadar.
     # With a 25% sector cap instead of the equal sector split: 1.13 / 12.3% / -19% (0.96 excess).
     "sue_fcfy": {"sue": 0.5, "fcf_yield": 0.5},
+    # Leader since 2026-11-12: sue_fcfy at 80% plus a 20% tilt split equally over six value / quality / revenue
+    # features (sweep round 42 "all6_20"), on liquidity ranks 201-1000 with 45 names, 25% sector cap, daily rebalance.
+    # Stitched 26-yr Sharpe 1.26 / excess 1.10 / 13.8% CAGR / -16.9% drawdown vs 1.20 / 1.03 / 13.0% for sue_fcfy;
+    # nearly every 2-4 feature subset at 20% also beat it (1.20-1.28). Needs model.fundamentals: sharadar.
+    "sue_fcfy_q6": {"sue": 0.4, "fcf_yield": 0.4, "sur": 0.2 / 6, "ebitda_ev": 0.2 / 6, "sp": 0.2 / 6,
+                    "opprof": 0.2 / 6, "roic": 0.2 / 6, "fscore": 0.2 / 6},
 }
 
 
