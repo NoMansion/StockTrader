@@ -526,3 +526,32 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
   - a Sharadar outage skips the day with no alert;
   - the scheduled task runs only while logged in;
   - the live fundamentals code has the same missing-quarter and never-expire bugs as the old panels.
+
+
+### 8.16 Friday 2026-11-13, 09:20: live fixes, realistic-timing baseline, round 52
+
+- **Live-account fixes (the user chose all three groups; commit 03f6c18).**
+  - The no-trade band now works live: each day starts from the account's actual weights, and names inside the band are not traded. A dry run on 11-12 data sent 19 orders instead of 51.
+  - Orders go to the opening auction, which is how the backtests now fill. Alpaca accepts auction orders only after 19:00 ET, so the scheduled task now starts at 17:30 CT and sends at 18:01 CT.
+  - Safety checks: no trading on stale or half-updated price data; holidays exit quietly; a Sharadar outage falls back to cached data and logs an error; state and log files are saved safely; the fill-check script reads every order.
+  - The live fundamentals code now has the same three data fixes as the backtest panels, and gives exactly the same values on 565 sampled names and 9 features.
+  - One step is left for the user: the scheduled task still runs only while they are logged in.
+- **Realistic-timing baseline (round 51, ranks 201-1000, 2000-today):**
+
+  | Variant | Stitched | Excess | CAGR |
+  |---|---|---|---|
+  | Live model, old timing, old panels | 1.264 | 1.097 | - |
+  | Same, fixed panels | 1.252 | 1.085 | 13.6% |
+  | Live model, realistic timing | 1.188 | 1.021 | 12.9% |
+  | Realistic timing, 15 bps costs | 1.118 | 0.952 | - |
+  | Realistic timing, 20 bps costs | 1.048 | 0.882 | - |
+  | Best so far: risk-parity sleeve + summer de-risking | 1.327 | 1.129 | 12.2% |
+
+  The panel fixes cost 0.012 and realistic timing another 0.064. The rules that helped before still help under realistic timing, but by less.
+  
+  Not promoted: the best variant lowers CAGR from 12.9% to 12.2%, and the promote rule requires CAGR to rise. Round 51 is about half done.
+- **Round 52 queued (1,121 runs):** every live-base variant from rounds 38-48, rerun with realistic timing on the fixed panels.
+- **Fails-to-deliver data now goes back to 2004.** The older SEC files report only fails of 10,000 shares or more before September 2008, so that threshold is applied to every year.
+- **Sweep fixes.**
+  - The fixed panels hold every name, and a 1,000-name run that loaded them in full needed 7 GB and was killed. Runs now load only their own names and dates; the features are identical and memory use for those panels fell from 0.75 to 0.03 GB.
+  - 14.7 GB of retired panels were moved to E:\SweepData\archive and 7.1 GB of stale caches deleted. C: has 40.6 GB free.
