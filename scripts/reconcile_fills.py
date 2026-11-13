@@ -15,6 +15,21 @@ import pandas as pd
 from src.reconcile import fills_frame, orders_from_log, slippage, summarize
 
 
+def all_closed_orders(client, after, GetOrdersRequest, QueryOrderStatus, page: int = 500) -> list:
+    """Every closed order since `after`. Alpaca returns at most 500 per call, so page forward by submission time
+    (bug audit 2026-11-13: one call silently dropped everything past the 500th order, ~10 trading days)."""
+    out, seen = [], set()
+    while True:
+        batch = client.get_orders(GetOrdersRequest(status=QueryOrderStatus.CLOSED, after=after, limit=page, direction="asc"))
+        new = [o for o in batch if str(o.id) not in seen]
+        out += new
+        seen |= {str(o.id) for o in new}
+        if len(batch) < page or not new:
+            return out
+        # step back 1 s so orders sharing the boundary timestamp are not skipped; `seen` drops the repeats
+        after = (max(pd.Timestamp(o.submitted_at) for o in batch) - pd.Timedelta(seconds=1)).to_pydatetime()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--log", default="data/orders.log")
@@ -35,7 +50,8 @@ def main():
     from src.broker import AlpacaBroker
     client = AlpacaBroker().client
     after = (log["submit_date"].min() - pd.Timedelta(days=1)).to_pydatetime()
-    alp = client.get_orders(GetOrdersRequest(status=QueryOrderStatus.CLOSED, after=after, limit=500))
+    alp = all_closed_orders(client, after, GetOrdersRequest, QueryOrderStatus)
+    print(f"{len(alp)} closed orders at Alpaca since {after.date()}")
     fills = fills_frame(alp, log)
     if fills.empty:
         print("none of the logged orders are closed at Alpaca yet")

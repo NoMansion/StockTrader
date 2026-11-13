@@ -35,7 +35,7 @@ def _key() -> str:
     return k
 
 
-RETRY_WAITS = (5, 15, 45, 120)   # seconds between attempts; a reset connection must not kill the daily job
+RETRY_WAITS = (5, 15, 45, 120, 300, 600)   # seconds between attempts (~18 min in all); then the cached rows are used
 
 
 def _get(table: str, **params) -> pd.DataFrame:
@@ -74,11 +74,17 @@ def fetch_tickers(cache_dir: str | Path = "data", refresh: bool = False) -> pd.D
     return t
 
 
-def map_tickers(symbols: list[str], tickers: pd.DataFrame) -> dict[str, str]:
-    """Norgate symbol -> Sharadar ticker (see module docstring). Unmatched symbols are omitted."""
+def map_tickers(symbols: list[str], tickers: pd.DataFrame, first_dates: dict | None = None) -> dict[str, str]:
+    """Norgate symbol -> Sharadar ticker (see module docstring). Unmatched symbols are omitted.
+
+    `first_dates` (symbol -> first date with a Norgate price): a Sharadar company whose last price date is more than
+    10 days before the Norgate name began is a different, older company that used the ticker before (bug audit
+    2026-11-13: FOX was matched to FOX1, the old Fox Entertainment) and is not a candidate. Among live candidates
+    the exact ticker wins. Identical to the sweep's fund_common.mapping_v2."""
     f = tickers.copy()
     f["base"] = f["ticker"].str.replace(r"\d+$", "", regex=True)
     by_base = {b: g for b, g in f.groupby("base")}
+    first_dates = first_dates or {}
     out = {}
     for sym in symbols:
         m = _DELIST.match(sym)
@@ -94,8 +100,17 @@ def map_tickers(symbols: list[str], tickers: pd.DataFrame) -> dict[str, str]:
             g = by_base.get(sym)
             if g is None:
                 continue
+            fd = first_dates.get(sym)
+            if fd is not None and not pd.isna(fd):
+                g = g[g["lastpricedate"].isna() | (g["lastpricedate"] >= pd.Timestamp(fd) - pd.Timedelta(days=10))]
+                if g.empty:
+                    continue
             live = g[g["isdelisted"] == "N"]
-            out[sym] = (live if len(live) else g.sort_values("lastpricedate")).iloc[-1]["ticker"]
+            if len(live):
+                exact = live[live["ticker"] == sym]
+                out[sym] = (exact if len(exact) else live.sort_values("lastpricedate")).iloc[-1]["ticker"]
+            else:
+                out[sym] = g.sort_values("lastpricedate").iloc[-1]["ticker"]
     return out
 
 
@@ -126,12 +141,35 @@ def fetch_arq(tickers: list[str], start: str = "1997-01-01", since: str | None =
     return d.drop_duplicates(["ticker", "reportperiod", "date"], keep="last")
 
 
+def _log_error(msg: str, cache_dir: Path) -> None:
+    """Loud, persistent error line (data/run_daily_errors.log) that the daily check reads."""
+    from datetime import datetime
+    line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {msg}"
+    print("ERROR: " + msg, flush=True)
+    try:
+        with open(Path(cache_dir) / "run_daily_errors.log", "a") as fh:
+            fh.write(line + "\n")
+    except OSError:
+        pass
+
+
 def load_fundamentals(symbols: list[str], days: pd.DatetimeIndex, cache_dir: str | Path = "data",
-                      refresh: bool = False, start: str = "1997-01-01") -> dict[str, pd.DataFrame]:
-    """{feature: date x Norgate-symbol panel} for `symbols` over `days`, from cached + refreshed ARQ rows."""
+                      refresh: bool = False, start: str = "1997-01-01", first_dates: dict | None = None,
+                      refresh_tickers: bool = False) -> dict[str, pd.DataFrame]:
+    """{feature: date x Norgate-symbol panel} for `symbols` over `days`, from cached + refreshed ARQ rows.
+
+    If Sharadar cannot be reached after the retries (outage, rate limit), the cached rows are used and the failure
+    is written to data/run_daily_errors.log: one day without today's new filings is far better than skipping the
+    day (bug audit 2026-11-13: an outage used to abort the run silently)."""
     cache_dir = Path(cache_dir)
-    tk = fetch_tickers(cache_dir)
-    mapping = map_tickers(list(symbols), tk)
+    try:
+        tk = fetch_tickers(cache_dir, refresh=refresh_tickers)
+    except Exception as e:   # noqa: BLE001 - a stale ticker master is still usable
+        if not (cache_dir / "sharadar_tickers.pkl").exists():
+            raise
+        _log_error(f"Sharadar ticker master refresh failed ({type(e).__name__}: {str(e)[:120]}); using the cached one", cache_dir)
+        tk = fetch_tickers(cache_dir)
+    mapping = map_tickers(list(symbols), tk, first_dates=first_dates)
     wanted = sorted(set(mapping.values()))
     p = cache_dir / "sharadar_arq.pkl"
     rows = pd.read_pickle(p) if p.exists() else pd.DataFrame(columns=ARQ_COLUMNS)
@@ -142,17 +180,26 @@ def load_fundamentals(symbols: list[str], days: pd.DatetimeIndex, cache_dir: str
     have = set(rows["ticker"]) if len(rows) else set()
     new = [t for t in wanted if t not in have]
     parts = [rows]
-    if new:
-        parts.append(fetch_arq(new, start=start))
-    if refresh and have:
-        last = pd.to_datetime(rows["lastupdated"]).max() if len(rows) else None
-        since = (last - pd.Timedelta(days=3)).strftime("%Y-%m-%d") if last is not None else None
-        parts.append(fetch_arq(sorted(have & set(wanted)), start=start, since=since))
+    try:
+        if new:
+            parts.append(fetch_arq(new, start=start))
+        if refresh and have:
+            last = pd.to_datetime(rows["lastupdated"]).max() if len(rows) else None
+            since = (last - pd.Timedelta(days=3)).strftime("%Y-%m-%d") if last is not None else None
+            parts.append(fetch_arq(sorted(have & set(wanted)), start=start, since=since))
+    except Exception as e:   # noqa: BLE001
+        if not len(rows):
+            raise
+        _log_error(f"Sharadar refresh failed ({type(e).__name__}: {str(e)[:120]}); trading on the cached fundamentals "
+                   f"(last update {pd.to_datetime(rows['lastupdated']).max().date()})", cache_dir)
+        parts = [rows]
     rows = pd.concat([x for x in parts if len(x)], ignore_index=True) if any(len(x) for x in parts) else rows
     if len(rows):
         rows = rows.sort_values("lastupdated").drop_duplicates(["ticker", "reportperiod", "date"], keep="last")
         p.parent.mkdir(parents=True, exist_ok=True)
-        rows.to_pickle(p)
+        tmp = p.with_suffix(".pkl.tmp")
+        rows.to_pickle(tmp)
+        os.replace(tmp, p)
     by_sh = {t: g for t, g in rows[rows["ticker"].isin(wanted)].groupby("ticker")}
     quarterly = {}
     for sym, sh in mapping.items():
@@ -170,7 +217,12 @@ def fundamentals_from_config(cfg: dict, close: pd.DataFrame, refresh: bool = Fal
         return None
     if src != "sharadar":
         raise ValueError(f"model.fundamentals must be null or 'sharadar', got {src!r}")
-    panels = load_fundamentals(list(close.columns), close.index, refresh=refresh)
+    first = close.apply(lambda c: c.first_valid_index())
+    # the ticker master is refreshed once a week (new listings, renames); a failure falls back to the cached one
+    tk_path = Path("data") / "sharadar_tickers.pkl"
+    stale = tk_path.exists() and (pd.Timestamp.now() - pd.Timestamp(tk_path.stat().st_mtime, unit="s")).days >= 7
+    panels = load_fundamentals(list(close.columns), close.index, refresh=refresh, first_dates=first.dropna().to_dict(),
+                               refresh_tickers=bool(refresh and stale))
     n = int(panels["sue"].iloc[-1].notna().sum()) if panels else 0
     print(f"Fundamentals (sharadar): {len(panels)} features, {n}/{close.shape[1]} names with a current SUE")
     return panels

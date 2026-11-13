@@ -1,17 +1,31 @@
 """The daily job: pull latest bars, score, apply rules, send orders.
 
-Run after the close (config: live.schedule_local_time). Orders are market,
-day-in-force, so they fill at the next open.
+Run after the close (config: live.schedule_local_time). With live.order_type "opg" the orders go to the next
+opening auction (whole shares, sub-share rest as small DAY orders); Alpaca only accepts auction orders before
+09:28 or after 19:00 ET, so the run computes everything first and then waits for 19:01 ET before sending.
 
-    python scripts/run_daily.py --dry-run          # PaperBroker, no API calls
+    python scripts/run_daily.py --dry-run          # no orders: a paper copy of the Alpaca account (read-only)
     python scripts/run_daily.py                    # Alpaca paper (keys in .env)
 
-State (last weights, exit dates) persists in data/live_state.json.
+State (exit dates for the re-entry cooldown, last rebalance) persists in data/live_state.json. The weights the
+rules start from are the account's ACTUAL weights (positions / equity), the live twin of the backtest's
+drift_weights: the no-trade band (portfolio.min_trade_pct) then leaves drifted names alone instead of re-trading
+every name to yesterday's target (bug audit 2026-11-13).
+
+Safety: the run stops before any order if the price data is not current (last bar is not the latest completed
+session, or far fewer names have a bar today than yesterday), on a market holiday it exits quietly, and every
+failure that skips or degrades the day is written to data/run_daily_errors.log.
 """
 import argparse
+import gc
 import json
-from datetime import date
+import os
+import sys
+import time
+from datetime import date, datetime, timedelta
+from datetime import time as dtime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -27,12 +41,97 @@ from src.exposure import exposure_series, scale_rules
 from src.features import compute_features, forward_excess_return, realized_vol
 from src.memguard import start_guard, stop_guard
 from src.providers_sharadar import fundamentals_from_config
-from src.portfolio import State, rebalance
+from src.portfolio import State, drift_weights, rebalance
 from src.ranking import make_ranker, trailing_ic
 from src.sectors import load_sectors
 from src.universe import apply_membership, trade_membership, trim_to_universe
 
 STATE_PATH = Path("data/live_state.json")
+ERROR_LOG = Path("data/run_daily_errors.log")
+ET = ZoneInfo("America/New_York")
+OPG_CLOSED = (dtime(9, 28), dtime(19, 0))     # Alpaca rejects OPG orders submitted in this window (ET)
+
+
+class DataNotCurrent(RuntimeError):
+    pass
+
+
+def log_error(msg: str, path: Path = ERROR_LOG) -> None:
+    print("ERROR: " + msg, flush=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a") as fh:
+        fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} {msg}\n")
+
+
+def write_atomic(path: Path, text: str) -> None:
+    """Write via a temp file + rename, so a crash mid-write never leaves a truncated state file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
+def trading_sessions(start: date, end: date) -> list[date] | None:
+    """Exchange sessions from Alpaca's calendar (read-only); None if it cannot be reached."""
+    try:
+        from alpaca.trading.requests import GetCalendarRequest
+        from src.broker import AlpacaBroker
+        cal = AlpacaBroker().client.get_calendar(GetCalendarRequest(start=start, end=end))
+        return [pd.Timestamp(c.date).date() for c in cal]
+    except Exception as e:   # noqa: BLE001
+        print(f"Alpaca calendar unavailable ({type(e).__name__}); using weekdays", flush=True)
+        return None
+
+
+def expected_last_session(now_et: datetime, sessions: list[date] | None) -> date:
+    """The latest session whose close (16:00 ET) has passed. Without a calendar: the latest weekday."""
+    d = now_et.date()
+    if sessions is None:
+        sessions = [x.date() for x in pd.bdate_range(d - pd.Timedelta(days=10), d)]
+    done = [s for s in sessions if s < d or (s == d and now_et.time() >= dtime(16, 0))]
+    return max(done)
+
+
+def check_data(close: pd.DataFrame, expected: date, min_ratio: float = 0.9) -> None:
+    """Raise DataNotCurrent if the last bar is older than `expected` or today's cross-section is incomplete."""
+    last = close.index[-1].date()
+    if last < expected:
+        raise DataNotCurrent(f"price data ends {last}, the latest completed session is {expected} (Norgate not updated yet?)")
+    if len(close) >= 2:
+        n_now, n_prev = int(close.iloc[-1].notna().sum()), int(close.iloc[-2].notna().sum())
+        if n_prev and n_now < min_ratio * n_prev:
+            raise DataNotCurrent(f"only {n_now} names have a bar on {last} vs {n_prev} the session before (partial update?)")
+
+
+def account_weights(pos: pd.Series, eq: float, exclude: set) -> pd.Series:
+    """Actual stock weights in the account: market value / equity, sleeve ETFs excluded."""
+    w = (pos / eq) if eq > 0 else pos * 0.0
+    w = w[(w.abs() > 1e-9) & ~w.index.isin(list(exclude))]
+    return w.astype(float)
+
+
+def drifted(weights: pd.Series, close: pd.DataFrame, since: pd.Timestamp | None, today: pd.Timestamp) -> pd.Series:
+    """Saved weights drifted with daily returns from `since` (exclusive) to `today`, exactly like the backtest."""
+    if weights.empty or since is None or since not in close.index:
+        return weights
+    rets = close.pct_change().loc[close.index[close.index.get_loc(since) + 1]:today]
+    w = weights
+    for _, r in rets.iterrows():
+        w = drift_weights(w, r)
+    return w
+
+
+def wait_for_opg_window(now_fn=lambda: datetime.now(ET), sleep_fn=time.sleep) -> float:
+    """Block until Alpaca accepts opening-auction orders again (19:01 ET) if called inside 09:28-19:00 ET.
+    Returns the seconds waited."""
+    now = now_fn()
+    if not (OPG_CLOSED[0] <= now.time() < OPG_CLOSED[1]):
+        return 0.0
+    target = now.replace(hour=19, minute=1, second=0, microsecond=0)
+    secs = (target - now).total_seconds()
+    print(f"Opening-auction orders open at 19:00 ET: waiting {secs / 60:.0f} min before sending", flush=True)
+    sleep_fn(secs)
+    return secs
 
 
 def state_path(book: str | None = None) -> Path:
@@ -69,7 +168,7 @@ def save_state(s: State, path: Path = STATE_PATH, rebalanced: pd.Timestamp | Non
     stamp = rebalanced if rebalanced is not None else prev
     if stamp is not None:
         d["last_rebalance"] = pd.Timestamp(stamp).isoformat()
-    path.write_text(json.dumps(d, indent=2))
+    write_atomic(path, json.dumps(d, indent=2))
 
 
 def live_features(cfg: dict, rules, close, volume, raw_close, fund):
@@ -96,6 +195,7 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--force", action="store_true", help="rebalance even if portfolio.rebalance_every_days says to hold today")
     ap.add_argument("--provider", default=None, choices=[None, "yfinance", "tiingo", "norgate"])
+    ap.add_argument("--allow-stale", action="store_true", help="trade even if the price data is not the latest session")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -126,6 +226,18 @@ def main():
     membership = trade_membership(cfg["data"], raw_close, volume, membership)   # ranking: liquidity band, if set
     today = close.index[-1]
 
+    # Data freshness: never trade on yesterday's prices or on a half-updated cross-section
+    now_et = datetime.now(ET)
+    sessions = trading_sessions(now_et.date() - timedelta(days=14), now_et.date())
+    session_today = sessions is None or now_et.date() in sessions
+    if (args.provider or cfg["data"].get("provider")) == "norgate":
+        try:
+            check_data(raw_close, expected_last_session(now_et, sessions))
+        except DataNotCurrent as e:
+            if not args.allow_stale:
+                raise
+            print(f"WARNING (--allow-stale): {e}", flush=True)
+
     # Rebalance cadence: the backtest trades every Nth trading day and holds in between, so do the same live.
     every = int(p.get("rebalance_every_days", 1))
     first_state = state_path((build_books(cfg) or [None])[0].name if build_books(cfg) else None)
@@ -137,6 +249,9 @@ def main():
         if n < every:
             print(f"Not a rebalance day: last rebalance {prev.date()}, {n} trading day(s) ago, cadence every {every}. Holding.")
             stop_guard(guard)
+            if not session_today:
+                print("Market closed today: no equity row (it would overwrite the last session's).")
+                return
             if not args.dry_run:
                 from src.broker import make_broker
                 from src.monitor import append_equity
@@ -178,6 +293,19 @@ def main():
     else:
         print("Books: " + ", ".join(f"{b.name} ({b.ranker}, {b.weight:.0%}, top {b.top_n or rules.top_n})" for b in books))
 
+    # The account as it stands (read-only). Live: the rules start from these actual weights. Dry run: the same, on a
+    # paper copy of the account, so the dry run shows exactly the orders a real run would send.
+    sleeve_assets = set((p.get("sleeve") or {}).get("assets") or [])
+    acct = None
+    try:
+        from src.broker import AlpacaBroker
+        _ab = AlpacaBroker()
+        acct = (_ab.positions(), float(_ab.equity()), _ab.position_qty())
+    except Exception as e:   # noqa: BLE001
+        if not args.dry_run:
+            raise
+        print(f"Alpaca account not readable ({type(e).__name__}): dry run starts from the saved weights drifted to today")
+
     book_w, book_states, book_scores, book_prev = {}, {}, {}, {}
     for b in books:
         b_rules = book_rules(rules, b) if multi else rules
@@ -194,7 +322,14 @@ def main():
             print(f"Dropping {len(dead)} delisted/renamed name(s) from today's ranking: {', '.join(dead)}")
             scores = scores.drop(dead)
 
-        state = load_state(state_path(b.name if multi else None))
+        b_path = state_path(b.name if multi else None)
+        state = load_state(b_path)
+        if not multi and acct is not None:
+            w_now = account_weights(acct[0], acct[1], sleeve_assets)
+            print(f"Starting from the account's actual weights: {len(w_now)} names, {w_now.sum():.1%} in stocks")
+            state = State(weights=w_now, last_exit=state.last_exit)
+        else:   # books share one account: each book's saved weights drift with prices, as in the backtest
+            state = State(weights=drifted(state.weights, close, last_rebalance(b_path), today), last_exit=state.last_exit)
         ret_win, ic = None, float("nan")
         if b_rules.sizing == "optimizer":
             ret_win = close.pct_change().iloc[-b_rules.optimizer.cov_lookback:]
@@ -233,19 +368,46 @@ def main():
             raw_etf = EXT_LOADER(list(sl.assets)).ffill().iloc[-1]
             prices_today = pd.concat([prices_today, raw_etf.reindex(sl.assets)])
 
-    from src.broker import make_broker
+    # names the rules left untouched (inside the no-trade band) are not traded at all
+    prev_all = combine_weights(book_prev) if multi else book_prev[books[0].name]
+    skip = {t for t in new_w.index if t in prev_all.index and abs(float(new_w[t]) - float(prev_all[t])) < 1e-12}
+    print(f"Held inside the no-trade band (not traded): {len(skip)} names")
+
+    from src.broker import PaperBroker, make_broker
     from src.monitor import append_equity, write_ranking
     stop_guard(guard)   # the heavy work is done; never cut a run off while it is sending orders
-    broker = make_broker("paper" if args.dry_run else "alpaca", order_type=cfg.get("live", {}).get("order_type", "market"))
+    order_type = cfg.get("live", {}).get("order_type", "market")
     if args.dry_run:
+        import tempfile
+        broker = PaperBroker(Path(tempfile.gettempdir()) / "stocktrader_dryrun_account.json")
+        broker.acct = {"cash": 100_000.0, "positions": {}}
+        if acct is not None:   # a paper copy of the real account, priced at today's close
+            pos, eq, qty = acct
+            broker.acct = {"cash": eq - float(pos.sum()),
+                           "positions": {t: {"qty": float(qty[t]), "price": float(pos[t]) / float(qty[t])}
+                                         for t in pos.index if float(qty.get(t, 0.0)) != 0.0}}
         broker.mark(prices_today)
-    orders = broker.submit_targets(targets, prices_today)
+    else:
+        broker = make_broker("alpaca", order_type=order_type)
+        if order_type == "opg":
+            del close, volume, raw_close, feats, labels, membership, gate_membership
+            gc.collect()
+            wait_for_opg_window()
+    orders = broker.submit_targets(targets, prices_today, skip=skip)
     equity = broker.equity()
     cash = equity - float(broker.positions().sum())
     print(f"\n{len(orders)} orders  |  equity ${equity:,.0f}")
     if args.dry_run:
         print("dry run: live state, equity log and orders.log left untouched")
         return
+    failed = sorted({o["ticker"] for o in orders if o.get("error")})
+    if failed:
+        log_error(f"{len(failed)} order(s) rejected on {today.date()}: {', '.join(failed)}")
+        for b in books:   # an exit that was rejected did not happen: no re-entry cooldown for it
+            st = book_states[b.name]
+            for t in failed:
+                if st.last_exit.get(t) == today:
+                    st.last_exit.pop(t)
     for b in books:
         save_state(book_states[b.name], state_path(b.name if multi else None), rebalanced=today)
     append_equity(today, equity, cash, int((new_w > 0).sum()))
@@ -259,4 +421,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except DataNotCurrent as e:
+        log_error(f"no trading: {e}")
+        sys.exit(3)
+    except Exception as e:   # noqa: BLE001 - recorded for the daily check, then the job fails visibly
+        log_error(f"run failed: {type(e).__name__}: {str(e)[:300]}")
+        raise

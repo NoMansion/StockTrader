@@ -148,7 +148,9 @@ live:
   #   opg     whole-share market-on-open orders in the opening auction, which is the fill the
   #           backtest assumes; the sub-share remainder goes as a small DAY notional order.
   #           Compare fills with scripts/reconcile_fills.py after a few runs.
-  order_type: "market"
+  # "opg" since 2026-11-13 (user decision after the bug audit): the backtests are re-baselined on next-open fills,
+  # and Alpaca accepts auction orders only before 09:28 / after 19:00 ET, so run_daily waits for 19:01 ET to send.
+  order_type: "opg"
   # Memory guard (src/memguard.py): the daily job is stopped, before any order is sent, if free RAM
   # falls below this many GB. An unguarded run froze the PC on 2026-11-11. null = off.
   min_free_gb: 1.0

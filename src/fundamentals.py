@@ -78,13 +78,42 @@ def _r38_features(d: pd.DataFrame) -> pd.DataFrame:
     return o
 
 
+QDAYS = 91.3125
+
+
+def regularize_quarters(rows: pd.DataFrame, min_rows: int = 6) -> pd.DataFrame | None:
+    """One company's quarterly rows on a CONTIGUOUS fiscal-quarter grid (index = quarter number).
+
+    Keeps the first filing per report period. Each kept row gets a quarter number from the gap to the previous kept
+    row (gap / 91.3 days, rounded, at least 1); a row less than 75 days after the previous one is dropped. The frame
+    is then reindexed to every quarter, so a quarter the company never reported is a NaN row: trailing-4-quarter sums
+    and year-ago comparisons that need it become NaN instead of silently spanning five quarters (bug audit
+    2026-11-13; the old rule just dropped irregular rows and stitched over the gap). Inserted rows have no filing
+    `date`. Identical to the sweep's fund_common.regularize."""
+    d = rows.sort_values(["reportperiod", "date"]).drop_duplicates("reportperiod", keep="first")
+    rp = d["reportperiod"].values
+    keep, qn, last, q = [], [], None, 0
+    for i, r in enumerate(rp):
+        if last is None:
+            keep.append(i); qn.append(0); last = r
+            continue
+        gap = (r - last) / np.timedelta64(1, "D")
+        if gap < 75:
+            continue
+        q += max(1, int(round(gap / QDAYS)))
+        keep.append(i); qn.append(q); last = r
+    if len(keep) < min_rows:
+        return None
+    d = d.iloc[keep].copy()
+    d.index = pd.Index(qn, name="q")
+    return d.reindex(pd.RangeIndex(qn[-1] + 1, name="q"))
+
+
 def quarterly_features(rows: pd.DataFrame) -> pd.DataFrame | None:
     """Per-quarter features for one company, indexed by availability (filing) date.
-    Keeps the first filing per report period and only regular quarterly spacing."""
-    d = rows.sort_values(["reportperiod", "date"]).drop_duplicates("reportperiod", keep="first").set_index("reportperiod")
-    gap = d.index.to_series().diff().dt.days
-    d = d[(gap.isna()) | ((gap >= 75) & (gap <= 110))]
-    if len(d) < 6:
+    Keeps the first filing per report period, on a contiguous quarter grid (regularize_quarters)."""
+    d = regularize_quarters(rows)
+    if d is None:
         return None
     eps = d["epsdil"].where(d["epsdil"].notna(), d["eps"])
     t = pd.DataFrame({"eps": eps, "rev": d["revenue"], "cogs": d["cor"], "ni": d["netinc"], "ocf": d["ncfo"], "fcf": d["fcf"],
@@ -114,7 +143,7 @@ def quarterly_features(rows: pd.DataFrame) -> pd.DataFrame | None:
             out[k] = r38[k]
     out = out.replace([np.inf, -np.inf], np.nan)
     out.index = pd.DatetimeIndex(t["avail"].values, name="avail")
-    return out.sort_index()
+    return out[out.index.notna()].sort_index()          # drop the inserted (never reported) quarters
 
 
 def daily_column(s: pd.Series, days: pd.DatetimeIndex) -> np.ndarray:
@@ -153,7 +182,10 @@ def daily_panels(quarterly: dict[str, pd.DataFrame], days: pd.DatetimeIndex,
 
 def align_to_prices(panel: pd.DataFrame, close: pd.DataFrame) -> pd.DataFrame:
     """Reindex a feature panel onto the price matrix. Names without data get that day's
-    cross-sectional median (a neutral rank) so coverage gaps do not shrink the universe."""
-    w = panel.reindex(index=close.index.union(panel.index), columns=close.columns).ffill().reindex(close.index)
+    cross-sectional median (a neutral rank) so coverage gaps do not shrink the universe.
+    The panel already carries each value until the next filing or EXPIRE_DAYS; the forward fill here only bridges
+    calendar mismatches (at most 5 rows), so an expired value stays expired (bug audit 2026-11-13: an unlimited
+    ffill carried every expired filing forward forever)."""
+    w = panel.reindex(index=close.index.union(panel.index), columns=close.columns).ffill(limit=5).reindex(close.index)
     med = w.median(axis=1)
     return w.T.fillna(med).T.astype("float32")

@@ -97,8 +97,9 @@ def test_quarterly_features_drops_irregular_spacing_and_short_histories():
     r = _rows(n=5)
     assert quarterly_features(r) is None
     r = _rows(n=12)
-    r.loc[6, "reportperiod"] = r.loc[6, "reportperiod"] + pd.Timedelta(days=40)   # irregular quarter: it and the
-    assert len(quarterly_features(r)) == 10                                         # next (short-gap) row are dropped
+    r.loc[6, "reportperiod"] = r.loc[6, "reportperiod"] + pd.Timedelta(days=40)   # a 131-day quarter (fiscal change)
+    assert len(quarterly_features(r)) == 11                                         # counts as the next quarter; the row
+                                                                                    # 51 days after it is dropped (< 75)
 
 
 def test_daily_column_carries_forward_and_expires():
@@ -116,8 +117,12 @@ def test_daily_panels_and_alignment_fill_missing_names_with_median():
     assert set(panels) == {"sue", "gprof"} and list(panels["sue"].columns) == ["AAA", "BBB"]
     close = pd.DataFrame(1.0, index=pd.bdate_range("2017-01-02", "2019-12-31"), columns=["AAA", "BBB", "ZZZ"])
     a = align_to_prices(panels["gprof"], close)
-    assert a.shape == close.shape and a.notna().all().all()
-    assert a["ZZZ"].iloc[-1] == pytest.approx(a[["AAA", "BBB"]].iloc[-1].median())
+    live = panels["gprof"].notna().any(axis=1).reindex(close.index)                # until the last filings expire
+    assert a.shape == close.shape and a[live].notna().all().all()
+    assert a[~live].iloc[5:].isna().all().all()                                     # expired values are not carried
+                                                                                    # (beyond the 5-row calendar bridge)
+    d = live[live].index[-1]
+    assert a.loc[d, "ZZZ"] == pytest.approx(a.loc[d, ["AAA", "BBB"]].median())
     feats = compute_features(close, close * 1000, fundamentals={"gprof": panels["gprof"]})
     assert "gprof" in feats.columns and "mom_252_skip21" in feats.columns
 

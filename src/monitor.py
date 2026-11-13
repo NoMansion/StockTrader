@@ -11,6 +11,7 @@ Files (all under data/):
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,9 @@ def append_equity(date, equity: float, cash: float, n_positions: int, data_dir=D
         old = old[old["date"] != row["date"].iloc[0]]  # idempotent per day
         row = pd.concat([old, row], ignore_index=True)
     p.parent.mkdir(parents=True, exist_ok=True)
-    row.to_csv(p, index=False)
+    tmp = p.with_name(p.name + ".tmp")            # temp file + rename: a crash never truncates the equity log
+    row.to_csv(tmp, index=False)
+    os.replace(tmp, p)
 
 
 def write_ranking(scores: pd.Series, weights: pd.Series, prev_weights: pd.Series, top_n: int, data_dir=DATA) -> None:

@@ -105,7 +105,7 @@ def test_opg_orders_are_whole_shares_with_a_day_notional_remainder():
     by = {}
     for r in client.reqs:
         by.setdefault(r.symbol, []).append((r.side.value, r.time_in_force.value, r.qty, r.notional))
-    assert by["OLD"] == [("sell", "opg", 100, None), ("sell", "day", None, 50.0)]   # full exit: 100 sh + the half share
+    assert by["OLD"] == [("sell", "opg", 100, None), ("sell", "day", 0.5, None)]    # full exit: 100 sh + the half share by qty
     assert by["TRIM"] == [("sell", "opg", 20, None)]                                 # $2,000 / $100 exactly
     assert by["NEW"] == [("buy", "opg", 33, None), ("buy", "day", None, 100.0)]     # 33 x $300 + $100 remainder
     assert by["ODD"] == [("buy", "day", None, 50.0)]                                 # below one share: notional only

@@ -41,11 +41,14 @@ class PaperBroker:
     def equity(self) -> float:
         return float(self.acct["cash"] + self.positions().sum())
 
-    def submit_targets(self, target_w: pd.Series, prices: pd.Series) -> list[dict]:
+    def submit_targets(self, target_w: pd.Series, prices: pd.Series, skip: set | None = None) -> list[dict]:
         eq = self.equity()
         cur = self.positions()
         orders = []
+        skip = skip or set()
         for t in target_w.index.union(cur.index):
+            if t in skip:
+                continue
             tgt_val = eq * float(target_w.get(t, 0.0))
             cur_val = float(cur.get(t, 0.0))
             delta = tgt_val - cur_val
@@ -110,7 +113,10 @@ class AlpacaBroker:
                 return False
             time.sleep(poll_s)
 
-    def submit_targets(self, target_w: pd.Series, prices: pd.Series | None = None) -> list[dict]:
+    def submit_targets(self, target_w: pd.Series, prices: pd.Series | None = None, skip: set | None = None) -> list[dict]:
+        """`skip`: names the rules left untouched today (held inside the no-trade band). They are not traded even if
+        their market value moved between the decision and now: re-trading them to the target weight every day is
+        exactly the churn the band exists to avoid (bug audit 2026-11-13)."""
         from alpaca.trading.enums import OrderSide, TimeInForce
         from alpaca.trading.requests import MarketOrderRequest
 
@@ -120,8 +126,10 @@ class AlpacaBroker:
         eq = self.equity()
         cur = self.positions()
         orders = []
+        skip = skip or set()
         # sells first so cash is available for buys
-        deltas = {t: eq * float(target_w.get(t, 0.0)) - float(cur.get(t, 0.0)) for t in target_w.index.union(cur.index)}
+        deltas = {t: eq * float(target_w.get(t, 0.0)) - float(cur.get(t, 0.0))
+                  for t in target_w.index.union(cur.index) if t not in skip}
         opg = getattr(self, "order_type", "market") == "opg"
         held = self.position_qty() if opg else None
         for t, delta in sorted(deltas.items(), key=lambda kv: kv[1]):
@@ -129,7 +137,16 @@ class AlpacaBroker:
                 continue
             side = OrderSide.BUY if delta > 0 else OrderSide.SELL
             reqs = []
-            if opg:
+            if opg and side == OrderSide.SELL and float(target_w.get(t, 0.0)) <= 0.0:
+                # full exit in the opening auction: every whole share OPG, the fractional rest by quantity (DAY)
+                q = float(held.get(t, 0.0))
+                whole, frac = int(q), round(q - int(q), 9)
+                price = float(prices.get(t, 0.0)) if prices is not None else 0.0
+                if whole > 0:
+                    reqs.append(MarketOrderRequest(symbol=t, qty=whole, side=side, time_in_force=TimeInForce.OPG))
+                if frac > 0:
+                    reqs.append(MarketOrderRequest(symbol=t, qty=frac, side=side, time_in_force=TimeInForce.DAY))
+            elif opg:
                 price = float(prices.get(t, 0.0)) if prices is not None else 0.0
                 shares = int(abs(delta) // price) if price > 0 else 0
                 if side == OrderSide.SELL:
@@ -156,8 +173,8 @@ class AlpacaBroker:
             for req in reqs:
                 rec = {"ticker": t, "side": side.value, "tif": req.time_in_force.value}
                 if req.qty is not None:
-                    rec["qty"] = int(req.qty)
-                    rec["notional"] = round(int(req.qty) * price, 2)
+                    rec["qty"] = float(req.qty) if float(req.qty) != int(float(req.qty)) else int(float(req.qty))
+                    rec["notional"] = round(float(req.qty) * price, 2)
                 else:
                     rec["notional"] = float(req.notional)
                 try:
