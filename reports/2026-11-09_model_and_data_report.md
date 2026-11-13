@@ -483,3 +483,46 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
   - these are single-rule results;
   - the combinations, cost and next-open runs are still queued;
   - none of the rules exist in the live code yet. Each needs a port and a test against the sweep first.
+
+
+### 8.15 Friday 2026-11-13, 06:10: bug audit, realistic timing, fixed panels, re-baseline started
+
+- **Bug audit (four independent reviews of the backtest, the data builders, the alternative-data scripts and the live path).** The two findings that change results:
+  - **Same-close look-ahead on fundamentals.** Sharadar's filing date is often an after-close earnings release. The backtest used the new numbers at that day's close, so it booked the next morning's price gap: +0.33% on average for the strongest minus weakest earnings surprises. Every close-fill result, the live model's included, is inflated.
+  - **Market-cap look-ahead (fixed).** Sharadar's share counts are adjusted for later splits, so future winners looked bigger than they were. Market cap now comes from Sharadar's point-in-time figure, which matches the next filing within 25% for 97% of filings. This affects 175 results that used market-cap sizing. They are moved out of the leaderboard (sweep results_lookahead_mcap/), including the round 46/47 "four" leads of 1.415 and 1.502. The live account never used this sizing.
+- **How much the look-ahead was worth (round 50, live model, ranks 201-1000, 2000-today).** Excess Sharpe over T-bills; SPY scores 0.513 on the same measure:
+
+  | Timing | Excess Sharpe |
+  |---|---|
+  | Filing usable same close, close fills (old backtest) | 1.134 |
+  | Fundamentals 1 day later | 1.092 |
+  | 2 days later | 1.081 |
+  | 5 days later | 1.058 |
+  | 2 days later + next-open fills | 1.062 |
+  | 2 days later + next-open fills + 20 bps costs | 0.918 |
+
+  The look-ahead was worth about 0.06-0.07, mostly after 2011. The model stays well ahead of SPY. Costs matter more than timing: 20 bps instead of 10 costs 0.14. The weekly fill reconciliation will show the real figure.
+- **Fundamentals panels rebuilt with three fixes.** Cells changed: 1-4% depending on the feature; rank correlation with the old panels 0.96-1.00.
+  - A missing quarter is now a gap, not stitched over. About 2.4% of company-quarters were affected; for example Apple's July 2006 quarter is missing in Sharadar, and its year-over-year comparisons now skip it.
+  - Filings older than 400 days now really expire. The backtest used to carry them forward forever.
+  - Nine live tickers are no longer matched to an older, different company, e.g. Fox Corp to Fox Entertainment.
+- **Re-baseline queued (round 51, 74 variants, 148 runs, ahead of everything else).** Every run uses realistic timing: fundamentals usable the next day and fills at the next open, which is how the live account trades. It covers:
+  - the live model;
+  - every round 46 rule alone and in pairs, and the "four" combination with its neighbours and costs;
+  - the top 200 names included;
+  - ranks up to 3,000.
+
+  Old-timing jobs still in the queue are parked (sweep hold_oldtiming/). Nothing will be promoted until this baseline is in.
+- **Free alternative data (round 49: 460 variants, 589 runs, all with realistic timing and their own controls).**
+  - Downloaded: short interest, daily short volume, SEC 13F holdings, EDGAR filing events, 36 FRED macro series.
+  - Still downloading: Benzinga news with full text (at 2021-05), FINRA dark-pool volume (at 2022-12).
+  - 383 runs are queued behind round 51; the rest are added as their panels appear.
+  - 13F holdings fix: some filers report value in dollars where the form asks for thousands, so a holding whose implied price is far from the median filer's is corrected.
+- **Sharadar rate limit:** the 429 "account temporarily disabled" seen at 01:55 is on the Nasdaq Data Link endpoint only. The endpoint the daily job uses (api.sharadar.com) answered normally at 05:20.
+- **Live-path issues found by the audit (not changed; waiting for a decision):**
+  - every name is re-traded to its target daily, so the no-trade band never applies (51 orders on 11-12 where 20 were needed, 29 under $50);
+  - orders are regular market orders filled at 09:30-09:34, not opening-auction orders;
+  - there is no check that the data is current;
+  - a Sharadar outage skips the day with no alert;
+  - the scheduled task runs only while logged in;
+  - the live fundamentals code has the same missing-quarter and never-expire bugs as the old panels.
