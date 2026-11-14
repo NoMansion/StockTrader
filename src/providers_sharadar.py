@@ -226,3 +226,19 @@ def fundamentals_from_config(cfg: dict, close: pd.DataFrame, refresh: bool = Fal
     n = int(panels["sue"].iloc[-1].notna().sum()) if panels else 0
     print(f"Fundamentals (sharadar): {len(panels)} features, {n}/{close.shape[1]} names with a current SUE")
     return panels
+
+
+def filing_marketcaps(symbols: list[str], cache_dir: str | Path = "data", first_dates: dict | None = None) -> dict[str, pd.DataFrame]:
+    """Norgate symbol -> its Sharadar filings (`date` = datekey, `marketcap`), from the rows load_fundamentals cached
+    (call it first) and the same ticker map. Input to fundamentals.mcap_true (sqrt_mcap sizing)."""
+    cache_dir = Path(cache_dir)
+    p = cache_dir / "sharadar_arq.pkl"
+    if not p.exists():
+        return {}
+    rows = pd.read_pickle(p)[["ticker", "date", "marketcap"]]
+    rows = rows[rows["marketcap"] > 0]
+    rows["date"] = pd.to_datetime(rows["date"])
+    mapping = map_tickers(list(symbols), fetch_tickers(cache_dir), first_dates=first_dates)
+    by_sh = {t: g.sort_values("date").drop_duplicates("date", keep="last")[["date", "marketcap"]]
+             for t, g in rows[rows["ticker"].isin(set(mapping.values()))].groupby("ticker")}
+    return {sym: by_sh[sh] for sym, sh in mapping.items() if sh in by_sh}

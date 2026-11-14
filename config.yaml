@@ -10,7 +10,7 @@ data:
   # "norgate"   = point-in-time index constituents incl. delisted (Platinum+)
   # "static"    = hand list in universe.py (or universe_csv) — survivorship-biased
   universe: "liquidity"
-  liquidity_top_k: 1000          # universe = top-1000 by dollar volume; the band below picks ranks 201-1000
+  liquidity_top_k: 2500          # universe = top-2500 by dollar volume; the band below picks ranks 201-2500
   # Trade only liquidity ranks lo+1..hi of that universe (null = trade the whole top-K). The exposure
   # gates still read the full top-K index. Sweep 2026-11-10: the SUE + FCF-yield ranker on ranks
   # 451-1000 (1.06 stitched Sharpe, 0.89 over T-bills) beat the best top-450 model (1.00 / 0.84);
@@ -24,7 +24,12 @@ data:
   # REVERTED the same day: the sweep's fundamentals covered only names ever in the top 1000 (2000-2026), so
   # in those wider-universe backtests a rank-1200 stock had data only if it later grew into the top 1000
   # (look-ahead). Ranks 201-1000 are unaffected. The wide results are being rerun on complete panels.
-  liquidity_band: [200, 1000]
+  # Since 2026-11-14 (rounds 51/53/54, complete panels, realistic timing = fills at the next open, filings usable the
+  # next day): ranks 201-2500 with the four rules below (fresh entry, sqrt market-cap sizing, risk-parity sleeve,
+  # Altman-Z screen) = stitched 1.357 vs 1.188 for the old ranks 201-1000 model; under a trading cost MEASURED by
+  # liquidity rank (high-low spread estimator: ranks 2001-2500 pay +16 bps in 2000-04, +6-7 bps since 2010)
+  # 1.333 vs 1.183, at double that spread excess still ahead. Ranks 201-3000 tie (1.334) with a deeper drawdown.
+  liquidity_band: [200, 2500]
   min_price: 5.0
   index_name: "Russell 1000"     # only used when universe: norgate
   universe_csv: null
@@ -39,6 +44,9 @@ model:
   # Since 2026-11-12: "sue_fcfy_q6" = sue_fcfy at 80% + 20% split over sur / ebitda_ev / sp / opprof / roic / fscore
   # (needs the extra Sharadar columns; an old data/sharadar_arq.pkl is refetched once automatically).
   type: "sue_fcfy_q6"
+  # Value screen on today's cross-section (src/ranking.apply_screen): a name with Altman Z below 1.81 (the distress
+  # zone) leaves the ranking, a held one is sold; names without a Z stay. null = off.
+  screen: [{feat: altz, min: 1.81}]
   # forward-return horizon the ML model is trained to predict (trading days)
   horizon_days: 10
   # walk-forward: retrain every N trading days on a trailing window
@@ -62,13 +70,18 @@ portfolio:
   # "optimizer" = Stage B: the model decides count and size (see below)
   # "rank" = weight grows with rank (your add-on-up / trim-on-down rule),
   # "equal", or "inverse_vol". top_n / min_trade_pct are ignored by "optimizer".
-  sizing: "inverse_vol"       # sweep 2026-11-09: inverse-vol beat rank/equal on every window
+  # "sqrt_mcap" (since 2026-11-14) = weight ~ sqrt(point-in-time market cap: the last filing's Sharadar market cap
+  # carried by the price move since); with ranks up to 2500 it keeps the smallest names small.
+  sizing: "sqrt_mcap"         # was "inverse_vol" (sweep 2026-11-09: beat rank/equal on every window)
   vol_lookback_days: 20
   max_weight: 0.10            # no single name above 10%
   min_trade_pct: 0.20         # only add/trim if |drift| > 20% of target weight
   cash_buffer: 0.02           # keep 2% cash
   # Optional: don't rebuy a name within N days of exiting it (reduces whipsaw)
   reentry_cooldown_days: 10
+  # A name not held may only be bought within N trading days of its last filing (the day its SUE changed); held
+  # names are unaffected. null = off. Round 51: 21 days (14 / 30 neighbours agree).
+  fresh_entry_days: 21
   # Sector rule on the top-N selection (GICS level 1, src/sectors.py); null = off
   #   "equal"  equal number of names per sector, leftovers from the overall ranking
   #   "cap"    plain ranking, but no sector takes more than sector_cap of the slots (0.25 = 11 of 45)
@@ -83,7 +96,8 @@ portfolio:
   # Idle-cash sleeve (src/sleeve.py): cash above cash_buffer that the exposure layer leaves
   # uninvested goes into these ETFs. Sweep: always-equal IEF+GLD = +0.14 Sharpe, +2.8 pts CAGR
   # over 26 years, worst year -12%. null = off (cash stays cash).
-  sleeve: {assets: [IEF, GLD], rule: always_eq}
+  # Since 2026-11-14: rule "rp" = inverse 63-day volatility weights (IEF ~80%, GLD ~20% lately) instead of equal.
+  sleeve: {assets: [IEF, GLD], rule: rp}
   # null = off (cash stays cash); frac: 0.5 would put only half the idle cash in the sleeve
   # Backtest accounting only: remaining idle cash earns the 13-week T-bill yield (%IRX)
   cash_yield: true

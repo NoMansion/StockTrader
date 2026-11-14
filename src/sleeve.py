@@ -45,7 +45,7 @@ TBILL_SYMBOL = "%IRX"      # 13-week T-bill discount yield, in percent
 @dataclass
 class SleeveConfig:
     assets: tuple[str, ...] = ("IEF", "GLD")
-    rule: str = "always_eq"          # always_eq | trend_eq | momN (N months, trend-filtered)
+    rule: str = "always_eq"          # always_eq | trend_eq | momN (N months, trend-filtered) | rp (inverse 63-day vol)
     frac: float = 1.0                # share of idle cash the sleeve uses
     cost_bps: float = 5.0            # one-way cost per sleeve trade in the backtest
     full: bool = False               # True: idle = 1 - stocks - base (cash_buffer becomes a stock/sleeve split)
@@ -81,6 +81,13 @@ def sleeve_allocation(prices: pd.DataFrame, rule: str) -> pd.DataFrame:
     assets = list(prices.columns)
     if rule == "always_eq":
         return pd.DataFrame(1.0 / len(assets), index=prices.index, columns=assets)
+    if rule == "rp":
+        # inverse 63-day volatility (known at t), as the sweep's _sleeve_alloc "rp" (ranks 201-2500 model, 2026-11-14);
+        # before any asset has 40 days of returns: equal split
+        iv = 1.0 / prices.pct_change().rolling(63, min_periods=40).std().replace(0, np.nan)
+        w = iv.div(iv.sum(axis=1).replace(0, np.nan), axis=0)
+        none = w.isna().all(axis=1)
+        return w.fillna(0.0).where(~none, 1.0 / len(assets), axis=0)
     trend = (prices / prices.shift(252) - 1) > 0
     if rule == "trend_eq":
         aw = trend.astype(float)

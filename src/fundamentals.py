@@ -24,7 +24,12 @@ A value becomes known on its filing date (`avail`) and expires EXPIRE_DAYS later
 newer arrived. Input rows follow Sharadar's SF1 ARQ column names (one row per fiscal quarter):
     reportperiod, date (filing date), eps, epsdil, revenue, cor, netinc, netinccmn, ncfo, fcf,
     assets, equity, marketcap, sharesbas, plus (round 38 features) sgna, intexp, ebit, ebitda, ev,
-    assetsc, liabilitiesc, debt, debtnc, invcap, shareswa
+    assetsc, liabilitiesc, debt, debtnc, invcap, shareswa, plus (round 41, the altz screen) liabilities,
+    workingcapital, retearn
+
+Round 41 (2026-11-14, live since the ranks 201-2500 switch): altz = Altman Z-score with the market value of equity,
+    1.2 WC/A + 1.4 RE/A + 3.3 EBIT_ttm/A + 0.6 MVE/TL + 1.0 Sales_ttm/A, clipped to [-10, 20] (< 1.81 = distress zone),
+    exactly as the sweep's sharadar_build5_v2.py.
 """
 from __future__ import annotations
 
@@ -32,12 +37,14 @@ import numpy as np
 import pandas as pd
 
 FEATURES_R38 = ("sur", "ebitda_ev", "sp", "opprof", "roic", "fscore")
+FEATURES_R41 = ("altz",)
 FEATURES = ("sue", "gprof", "ni_growth", "accruals", "fcf_yield", "ep", "sales_growth", "asset_growth", "buyback", "roe",
-            "fcf_assets") + FEATURES_R38
+            "fcf_assets") + FEATURES_R38 + FEATURES_R41
 EXPIRE_DAYS = 400
 R38_COLUMNS = ["sgna", "intexp", "ebit", "ebitda", "ev", "assetsc", "liabilitiesc", "debt", "debtnc", "invcap", "shareswa"]
+R41_COLUMNS = ["liabilities", "workingcapital", "retearn"]
 ARQ_COLUMNS = ["ticker", "dimension", "calendardate", "date", "reportperiod", "lastupdated", "eps", "epsdil", "netinc",
-               "netinccmn", "revenue", "cor", "ncfo", "fcf", "assets", "equity", "marketcap", "sharesbas"] + R38_COLUMNS
+               "netinccmn", "revenue", "cor", "ncfo", "fcf", "assets", "equity", "marketcap", "sharesbas"] + R38_COLUMNS + R41_COLUMNS
 
 
 def _nz(s: pd.Series) -> pd.Series:
@@ -75,6 +82,17 @@ def _r38_features(d: pd.DataFrame) -> pd.DataFrame:
     o["fscore"] = f.sum(axis=1).astype("float64").where(ok)
     o["roic"] = ttm["ebit"] / invcap
     o["opprof"] = (ttm["revenue"] - ttm["cor"] - ttm["sgna"].fillna(0) - ttm["intexp"].fillna(0)) / equity
+    return o
+
+
+def _r41_features(d: pd.DataFrame) -> pd.DataFrame:
+    """altz on the regularized quarterly rows `d`, exactly as the sweep's sharadar_build5_v2.py computes it."""
+    ttm = {n: d[n].rolling(4, min_periods=4).sum() for n in ("ebit", "revenue")}
+    A = _nz(d["assets"]).ffill(limit=2)
+    mve = _nz(d["marketcap"]).ffill(limit=2)
+    o = pd.DataFrame(index=d.index)
+    o["altz"] = (1.2 * d["workingcapital"] / A + 1.4 * d["retearn"] / A + 3.3 * ttm["ebit"] / A
+                 + 0.6 * mve / _nz(d["liabilities"]) + 1.0 * ttm["revenue"] / A).clip(-10, 20)
     return o
 
 
@@ -141,6 +159,8 @@ def quarterly_features(rows: pd.DataFrame) -> pd.DataFrame | None:
         r38 = _r38_features(d)
         for k in FEATURES_R38:
             out[k] = r38[k]
+    if all(c in d.columns for c in R41_COLUMNS + ["ebit"]):
+        out["altz"] = _r41_features(d)["altz"]
     out = out.replace([np.inf, -np.inf], np.nan)
     out.index = pd.DatetimeIndex(t["avail"].values, name="avail")
     return out[out.index.notna()].sort_index()          # drop the inserted (never reported) quarters
@@ -189,3 +209,47 @@ def align_to_prices(panel: pd.DataFrame, close: pd.DataFrame) -> pd.DataFrame:
     w = panel.reindex(index=close.index.union(panel.index), columns=close.columns).ffill(limit=5).reindex(close.index)
     med = w.median(axis=1)
     return w.T.fillna(med).T.astype("float32")
+
+
+def mcap_true(filings: dict[str, pd.DataFrame], adj: pd.DataFrame) -> pd.DataFrame:
+    """Point-in-time market cap, date x symbol on `adj`'s calendar (the sweep's alt/mcap_build.py, sqrt_mcap sizing).
+
+    Sharadar `marketcap` on a filing (datekey) is correct point in time; carry it forward by the adjusted price:
+        mcap(t) = marketcap(last filing k with datekey <= t) x adj(t) / adj(anchor_k),
+    anchor_k = the last trading day <= datekey_k. A value holds from its anchor until the next filing's anchor or
+    EXPIRE_DAYS after its datekey (exclusive), whichever is first. `filings`: symbol -> rows with `date` (datekey)
+    and `marketcap`."""
+    idx = adj.index
+    M = np.full(adj.shape, np.nan, dtype="float64")
+    ci = {c: j for j, c in enumerate(adj.columns)}
+    for sym, g in filings.items():
+        j = ci.get(sym)
+        if j is None or g is None or not len(g):
+            continue
+        g = g[g["marketcap"] > 0].sort_values("date").drop_duplicates("date", keep="last")
+        a = adj.iloc[:, j].to_numpy(dtype="float64")
+        dk = pd.to_datetime(g["date"]).to_numpy()
+        mc = g["marketcap"].to_numpy(dtype="float64")
+        pos = idx.searchsorted(dk, side="right") - 1
+        for k in range(len(g)):
+            pk = pos[k]
+            if pk < 0 or not np.isfinite(a[pk]) or a[pk] <= 0:
+                continue
+            stop = idx.searchsorted(dk[k] + np.timedelta64(EXPIRE_DAYS, "D"), side="right")
+            if k + 1 < len(g):
+                stop = min(stop, pos[k + 1])
+            if stop <= pk:
+                continue
+            M[pk:stop, j] = mc[k] * a[pk:stop] / a[pk]
+    return pd.DataFrame(M, index=idx, columns=adj.columns)
+
+
+def fresh_mask(sue: pd.DataFrame, close: pd.DataFrame, days: int) -> pd.DataFrame:
+    """date x ticker bool: True within `days` trading days of the day the name's SUE last changed (its last filing),
+    on `close`'s calendar and columns. Names that never had a SUE are never fresh. The sweep's fresh_entry (built
+    from the un-lagged daily SUE panel, as here)."""
+    p = sue.reindex(index=close.index.union(sue.index), columns=close.columns).ffill(limit=5).reindex(close.index)
+    chg = (p.ne(p.shift()) & p.notna()).to_numpy()
+    pos = np.arange(len(p))[:, None] * np.ones((1, p.shape[1]))
+    last = pd.DataFrame(np.where(chg, pos, np.nan), index=p.index, columns=p.columns).ffill()
+    return (pd.DataFrame(pos, index=p.index, columns=p.columns) - last) <= int(days)

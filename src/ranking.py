@@ -158,3 +158,21 @@ def information_coefficient(scores: pd.Series, labels: pd.Series) -> float:
     if len(j) < 5:
         return np.nan
     return j["s"].rank().corr(j["y"].rank())
+
+
+def apply_screen(scores: pd.Series, feats_today: pd.DataFrame, spec) -> pd.Series:
+    """`model.screen`: {feat, min, max} (or a list of them) value thresholds on a raw feature column of today's
+    cross-section. A name outside [min, max] leaves the ranking (a held one is then sold); a name without a value
+    stays. Identical to the sweep's ScreenRanker value-threshold branch (ranks 201-2500 model, 2026-11-14:
+    {feat: altz, min: 1.81} drops the Altman-Z distress zone)."""
+    if not spec:
+        return scores
+    for sp in (spec if isinstance(spec, list) else [spec]):
+        if "min" not in sp and "max" not in sp:
+            raise ValueError(f"model.screen supports value thresholds (min / max) only, got {sp!r}")
+        if sp["feat"] not in feats_today.columns:
+            raise ValueError(f"model.screen feature {sp['feat']!r} is not in the feature set")
+        v = feats_today[sp["feat"]].reindex(scores.index)
+        keep = (v >= float(sp.get("min", -np.inf))) & (v <= float(sp.get("max", np.inf)))
+        scores = scores[keep | v.isna()]
+    return scores

@@ -555,3 +555,47 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
 - **Sweep fixes.**
   - The fixed panels hold every name, and a 1,000-name run that loaded them in full needed 7 GB and was killed. Runs now load only their own names and dates; the features are identical and memory use for those panels fell from 0.75 to 0.03 GB.
   - 14.7 GB of retired panels were moved to E:\SweepData\archive and 7.1 GB of stale caches deleted. C: has 40.6 GB free.
+
+
+### 8.17 Saturday 2026-11-14, 11:15: new leader, the four-rule model on ranks 201-2500 (rounds 51, 53, 54)
+
+- **Switched the paper account** (config only; Monday 11-16's 17:30 job is the first to trade it). Same ranker (sue_fcfy_q6) on liquidity ranks 201-2500 instead of 201-1000, plus four rules:
+  - **Altman Z screen:** names below 1.81 (the distress zone) leave the ranking; a held one is sold.
+  - **Fresh entry:** a name not held may be bought only within 21 trading days of its last filing.
+  - **Market-cap sizing:** weight grows with the square root of the point-in-time market cap, so the smallest names stay small.
+  - **Risk-parity sleeve:** IEF / GLD weighted by inverse 63-day volatility instead of equally (today about 80% / 20%).
+- **Results (realistic timing: next-open fills, filings usable the next day; complete panels):**
+
+  | Model | Stitched | Excess | 2000-10 | 2010+ | CAGR | Max DD | Worst year |
+  |---|---|---|---|---|---|---|---|
+  | Old live, ranks 201-1000 | 1.188 | 1.021 | 1.387 | 1.063 | 12.9% | -18.3% | -8.7% |
+  | **New, ranks 201-2500** | **1.357** | **1.189** | **1.760** | **1.117** | **14.8%** | **-21.7%** | **-10.7%** |
+  | SPY controls (best: gates + sleeve) | 0.885 | 0.713 | - | - | 9.0% | -21.1% | - |
+
+- **Trading costs measured by liquidity rank.** Small names cost more to trade than the flat 10 bps the backtests charge, so the spread was estimated from Norgate daily high / low / close (Abdi-Ranaldo, 2000-2026, price >= $5). The estimator overstates every name's level, so only the extra cost over ranks 201-1000 was used:
+
+  | Ranks | Extra half-spread 2000-04 | 2005-09 | 2010-14 | 2015-19 | 2020-26 |
+  |---|---|---|---|---|---|
+  | 1001-1500 | +5 bps | +1 | +1 | +2 | +3 |
+  | 1501-2000 | +11 | +5 | +4 | +5 | +6 |
+  | 2001-2500 | +16 | +10 | +6 | +7 | +7 |
+  | 2501-3000 | +19 | +16 | +10 | +10 | +8 |
+
+  Every trade was then charged 10 bps plus its rank's extra cost for that era (new sweep option `cost_rank`):
+
+  | Model under the measured cost | Stitched | 2000-10 | Max DD |
+  |---|---|---|---|
+  | Old live, ranks 201-1000 | 1.183 | 1.382 | -18.5% |
+  | Ranks 201-2250 / 2500 / 2750 / 3000 | 1.320 / **1.333** / 1.325 / 1.334 | 1.74 / 1.73 / 1.77 / 1.82 | -21.5 / -21.7 / -23.5 / -23.6% |
+  | Ranks 201-2500 at double the extra cost | 1.309 (old live: 1.177) | 1.700 | -21.8% |
+  | Ranks 201-2500 at 13 bps + extra (our fills) | 1.299 (old live: 1.141) | 1.698 | -21.9% |
+
+  Ranks 201-2500 ties 201-3000 with a smaller drawdown and a better 2010+ Sharpe (1.097 vs 1.043), and keeps a clear margin from the -25% limit under every cost.
+- **Real fills so far (323, 11-09 to 11-13, ranks 201-1000):** median 0 bps vs the open, +12.8 bps notional-weighted; the backtest assumes 10.
+- **Checks before switching.**
+  - All four rules were new to the live code. Each was ported (tests/test_wide_port.py) and gives the same result as the sweep code on real data: Altman Z on 352 companies / 8,939 filings, market cap on 300 names (max difference 2e-7), sizing and screen in 300 random cases each, the fresh-entry mask exactly. The sleeve prices differ only in the last week, where the sweep's cached ETF prices stop on 11-06.
+  - Exact replay: the 2000-2010 half matches to zero; the 2005-2026 half differs by at most 0.09% on a day (Sharpe 1.1171 vs 1.1173), from a data rebuild on 11-14. Stocks plus sleeve never exceed 98.1% of the account.
+  - 118 tests pass. Dry run on 11-13 data: 68 orders, 32% stocks / 53% IEF / 13% GLD under today's low exposure; peak memory 6.3 GB (the old model's job used 5-6 GB).
+  - The live fundamentals now fetch three more Sharadar fields (total liabilities, working capital, retained earnings); the first run refetched every row once.
+- **Not changed:** `scripts/run_backtest.py` does not yet wire the market-cap and fresh-entry rules, so it cannot run this config.
+- **Sweep fixes.** 36 macro-gate runs had failed after the 11-13 memory fix stripped the FRED columns from their panel; fixed and requeued. The sweep's pause window around the daily job moved to 17:24-17:35 to match the new start time.

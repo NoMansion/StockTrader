@@ -14,7 +14,13 @@ Sizing rules:
                   rising stock climbs the ranking → bigger target → add.
   "equal"       — 1/N
   "inverse_vol" — risk parity-ish; low-vol names get more weight
+  "sqrt_mcap"   — weight ~ sqrt(point-in-time market cap) (`Rules.mcap`, today's values; names without one get the
+                  median of the chosen names), "mcap" the same without the square root
 All are capped at `max_weight` and scaled to (1 - cash_buffer).
+
+Fresh entry (`Rules.fresh`, ranks 201-2500 model, 2026-11-14): a name not already held may only be bought while
+`fresh[name]` is True (live: within N trading days of its last filing, i.e. of the day its SUE last changed).
+Held names are never forced out by it.
 """
 from __future__ import annotations
 
@@ -41,6 +47,8 @@ class Rules:
     sector_mode: str | None = None
     sector_cap: float | None = None                          # "cap" only, e.g. 0.25 = 10 of 40 names
     sectors: dict | None = field(default=None, repr=False)   # ticker -> sector name
+    mcap: pd.Series | None = field(default=None, repr=False)  # today's market cap per ticker ("mcap" / "sqrt_mcap")
+    fresh: pd.Series | None = field(default=None, repr=False)  # today's bool per ticker: may be bought (None = off)
 
 
 @dataclass
@@ -81,6 +89,12 @@ def size_positions(scores: pd.Series, vol: pd.Series | None, rules: Rules) -> pd
         raw = (1.0 / v).fillna((1.0 / v).median())
     elif rules.sizing == "rank":
         raw = scores.rank(ascending=True)  # 1..n, best name gets n
+    elif rules.sizing in ("mcap", "sqrt_mcap"):
+        if rules.mcap is None:
+            raise ValueError(f"sizing {rules.sizing!r} needs Rules.mcap (today's market cap per ticker)")
+        m = rules.mcap.reindex(scores.index).astype("float64")
+        m = m.fillna(m.median() if m.notna().any() else 1.0)
+        raw = m ** (0.5 if rules.sizing == "sqrt_mcap" else 1.0)
     else:
         raise ValueError(f"unknown sizing: {rules.sizing}")
     return _cap_and_scale(raw, rules.max_weight, 1.0 - rules.cash_buffer)
@@ -90,6 +104,9 @@ def select_top(scores: pd.Series, rules: Rules, state: State, today: pd.Timestam
     """Top-N by score, excluding names in re-entry cooldown (unless already held)."""
     s = scores.dropna().sort_values(ascending=False)
     held = set(state.weights[state.weights > 0].index)
+    if rules.fresh is not None:
+        ok = rules.fresh.reindex(s.index).fillna(False).astype(bool)
+        s = s[ok.to_numpy() | s.index.isin(held)]
     blocked = {
         t for t, d in state.last_exit.items()
         if t not in held and (today - d).days < rules.reentry_cooldown_days

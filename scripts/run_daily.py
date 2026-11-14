@@ -42,7 +42,7 @@ from src.features import compute_features, forward_excess_return, realized_vol
 from src.memguard import start_guard, stop_guard
 from src.providers_sharadar import fundamentals_from_config
 from src.portfolio import State, drift_weights, rebalance
-from src.ranking import make_ranker, trailing_ic
+from src.ranking import apply_screen, make_ranker, trailing_ic
 from src.sectors import load_sectors
 from src.universe import apply_membership, trade_membership, trim_to_universe
 
@@ -280,6 +280,24 @@ def main():
 
     fund = fundamentals_from_config(cfg, close, refresh=True)
     feats = live_features(cfg, rules, close, volume, raw_close, fund)
+    # ranks 201-2500 model (2026-11-14): fresh-entry filter, point-in-time market-cap sizing (the altz screen is
+    # applied to each book's scores below); all three are the sweep's rules, ported with tests
+    if p.get("fresh_entry_days"):
+        if not fund or "sue" not in fund:
+            raise RuntimeError("portfolio.fresh_entry_days needs model.fundamentals (the SUE panel)")
+        from src.fundamentals import fresh_mask
+        fr = fresh_mask(fund["sue"], close.iloc[-300:], int(p["fresh_entry_days"])).loc[today]
+        rules = replace(rules, fresh=fr)
+        print(f"Fresh entry (<= {p['fresh_entry_days']} trading days since the last filing): {int(fr.sum())} names may be bought today")
+    if rules.sizing in ("mcap", "sqrt_mcap"):
+        from src.fundamentals import mcap_true
+        from src.providers_sharadar import filing_marketcaps
+        first = close.apply(lambda c: c.first_valid_index())
+        fil = filing_marketcaps(list(close.columns), first_dates=first.dropna().to_dict())
+        mc = mcap_true(fil, close.iloc[-320:]).iloc[-1]      # 320 bars > the 400-day expiry: every live value is in
+        rules = replace(rules, mcap=mc)
+        print(f"Market cap ({rules.sizing} sizing): {int(mc.notna().sum())}/{close.shape[1]} names have one today")
+    screen = m.get("screen")
     labels = forward_excess_return(close, bt.horizon_days)
     vol = realized_vol(close, p["vol_lookback_days"]).loc[today]
     adv_today = dollar_adv(raw_close, volume, 60).loc[today]
@@ -314,6 +332,10 @@ def main():
             end = close.index[-1 - bt.horizon_days]
             ranker.fit(feats.loc[close.index[-bt.train_window_days]:end], labels, end_date=end)
         scores = ranker.score(feats.xs(today, level="date"))
+        if screen:
+            n0 = len(scores)
+            scores = apply_screen(scores, feats.xs(today, level="date"), screen)
+            print(f"Screen {screen}: {n0 - len(scores)} of {n0} names removed")
         if members_today is not None:
             scores = scores[scores.index.isin(members_today[members_today].index)]
         # Norgate renames a stock that delists (or is about to) to TICKER-YYYYMM; nothing tradeable is left behind it
