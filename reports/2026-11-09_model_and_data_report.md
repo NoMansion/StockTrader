@@ -599,3 +599,30 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
   - The live fundamentals now fetch three more Sharadar fields (total liabilities, working capital, retained earnings); the first run refetched every row once.
 - **Not changed:** `scripts/run_backtest.py` does not yet wire the market-cap and fresh-entry rules, so it cannot run this config.
 - **Sweep fixes.** 36 macro-gate runs had failed after the 11-13 memory fix stripped the FRED columns from their panel; fixed and requeued. The sweep's pause window around the daily job moved to 17:24-17:35 to match the new start time.
+
+### 8.18 Saturday 2026-11-14, 6:00 pm: round 49 (free alternative data) finished, no gain
+
+- Every round 49 run is in except 5 "all alternative data at once" variants (ranks 201-1,000, 1,500 and 2,500). They need about 8.7 GB each and were stopped twice by the low-memory guard.
+- No alternative-data signal clears its own control by the 0.03 Sharpe margin:
+  - ranks 201-1,000: the best (the seasonal control plus a positive SEC-filing tilt) is 1.326, against 1.334 for its control;
+  - ranks 201-1,500: the best is a yield-curve gate at 1.327 (+0.023 over its control at 1.304), then a fails-to-deliver screen at 1.317 (+0.013).
+- Both are below the live model (1.357 on ranks 201-2,500), so nothing changes. Short interest, short volume, 13F holdings, filing events and the macro gates are closed as a family.
+- The sweep was paused by the user 1:20-5:15 pm and is back to 3 workers now that the large round 49 runs are done.
+
+### 8.19 Sunday 2026-11-15, 6:15 am: the May-October exposure cut is not a calendar effect (rounds 55 and 56)
+
+- **Question.** At ranks 201-1,000, cutting stock exposure to 75% from May to October (the rest goes to the IEF/GLD sleeve) raised the four-rule model's Sharpe from 1.252 to 1.334. It had never been run on the live ranks 201-2,500 model.
+- **Round 55 on the live model.** The control re-run reproduced live exactly (1.357, CAGR 14.8%). The May-Oct cut scored 1.428, but CAGR fell to 14.1%. Almost all of its gain came from 2000-2010: 1.938 there vs 1.760 for live, and 1.124 vs 1.118 since 2010.
+- **Round 56: the same 25% cut in all 12 rolling six-month windows, plus a flat cut every month.**
+
+  | Cut | Sharpe | Since 2010 | CAGR | Drawdown |
+  |---|---|---|---|---|
+  | None (live) | 1.357 | 1.118 | 14.8% | −21.7% |
+  | May-Oct to 75% | 1.428 | 1.124 | 14.1% | −21.6% |
+  | Other 11 windows, range | 1.348-1.409 | 1.072-1.197 | 13.3-14.0% | −17.4% to −21.7% |
+  | Other 11 windows, median | 1.388 | 1.136 | — | — |
+  | Every month to 87.5% | 1.402 | 1.148 | 13.7% | −18.9% |
+  | Every month to 75% | **1.443** | **1.170** | 12.7% | −17.7% |
+
+- **Reading.** May-Oct ranks first of the 12 windows, about +0.04 over their median, but a flat cut to 75% every month beats it, especially since 2010. Most of the gain is from holding less stock, not from the calendar. Every variant lowers CAGR, which the promotion rule does not allow, so nothing changes.
+- **Side finding.** At constant 75% exposure the live stock book has a higher Sharpe and a shallower drawdown, but a lower CAGR (12.7% vs 14.8%). That is a choice of risk level, not a better model. It stays as is under the current rule; it is the user's call if lower risk is wanted.
