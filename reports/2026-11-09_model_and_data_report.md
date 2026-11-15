@@ -626,3 +626,21 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
 
 - **Reading.** May-Oct ranks first of the 12 windows, about +0.04 over their median, but a flat cut to 75% every month beats it, especially since 2010. Most of the gain is from holding less stock, not from the calendar. Every variant lowers CAGR, which the promotion rule does not allow, so nothing changes.
 - **Side finding.** At constant 75% exposure the live stock book has a higher Sharpe and a shallower drawdown, but a lower CAGR (12.7% vs 14.8%). That is a choice of risk level, not a better model. It stays as is under the current rule; it is the user's call if lower risk is wanted.
+
+### 8.20 Sunday 2026-11-15, 2:15 pm: the live model's settings are at their best point (rounds 57 and 58)
+
+- **Round 57: ranker weights on the live ranks 201-2,500 model.** At ranks 201-1,000 (no four rules) putting 30% on the six quality/value signals scored 1.213 vs 1.188 for the live 20%. On the live model it does not carry over: 30% 1.359 (2000s 1.699 vs 1.760), 40% 1.338, and three other blends 1.25-1.30. The control reproduced live exactly (1.357). The live weighting stays.
+- **Round 58: every setting of the live model moved one step either way** (realistic timing, 23 variants).
+
+  | Setting (live value) | Tested | Sharpe | 2000s | CAGR |
+  |---|---|---|---|---|
+  | Live | — | 1.357 | 1.760 | 14.8% |
+  | Fresh-entry window (21 days) | 10 / 30 / 42 | 1.336 / 1.357 / 1.365 | 1.760 / 1.780 / 1.782 | 14.5 / 14.8 / 14.9% |
+  | Names held (45) | 35 / 40 / 50 / 55 / 60 | 1.327 / 1.360 / 1.328 / 1.316 / 1.314 | | 14.1-15.0% |
+  | Sector cap (25%) | 20 / 30 / 35% | 1.330 / 1.352 / 1.333 | | 14.3-14.7% |
+  | Altman Z screen (1.81) | 1.23 / 2.99 | 1.328 / 1.280 | | 14.4 / 13.9% |
+  | Band starts at rank (201) | 101 / 151 / 301 / 401 | 1.358 / 1.362 / 1.323 / 1.260 | | 13.9-14.7% |
+  | Universe ends at rank (2,500) | 2,250 / 2,750 / 3,000 | 1.342 / 1.348 / 1.365 | | 14.5-15.2% |
+  | Added rules | 14-day min hold / earnings-quality screen | 1.321 / 1.342 | | 14.2 / 14.5% |
+
+- **Reading.** The live model sits on a flat top: the best neighbour is +0.008, far inside the noise, and most steps away lose 0.02-0.10. No single setting is a sharp peak, which is what a robust choice looks like. Nothing changes. The ranker-weight, seasonal and neighbour families on the live model are closed.
