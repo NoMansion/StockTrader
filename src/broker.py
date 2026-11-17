@@ -120,6 +120,8 @@ class AlpacaBroker:
         from alpaca.trading.enums import OrderSide, TimeInForce
         from alpaca.trading.requests import MarketOrderRequest
 
+        from .safety import require_live_confirmation
+        require_live_confirmation()     # real money only with LIVE_TRADING_CONFIRM=yes-real-money (src/safety.py)
         # stale unfilled orders from an earlier run would double up with today's deltas
         self.client.cancel_orders()
         self._wait_for_cancels()

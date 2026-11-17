@@ -168,3 +168,16 @@ live:
   # Memory guard (src/memguard.py): the daily job is stopped, before any order is sent, if free RAM
   # falls below this many GB. An unguarded run froze the PC on 2026-11-11. null = off.
   min_free_gb: 1.0
+  # Safety limits (src/safety.py), checked right before orders go out; any stop = no orders that day, exit code 4.
+  # Defaults sit just above the live model's backtest extremes (stock turnover 0.67, sleeve change 0.81, 38-45 names).
+  # Real money also needs LIVE_TRADING_CONFIRM=yes-real-money in .env next to ALPACA_PAPER=false.
+  safety:
+    kill_switch: data/STOP        # create this file to stop all trading; delete it to resume
+    max_equity_change: 0.25       # vs the last logged session (deposits above this: run once with --allow-full-rebuild)
+    min_positions: 30
+    max_positions: 60
+    max_order_pct: 0.12           # one stock order, fraction of equity (max_weight is 0.10)
+    max_sleeve_order_pct: 0.85    # one sleeve ETF order
+    max_stock_turnover: 0.9       # stock buys + sells in one day
+    max_total_turnover: 1.8       # stocks + sleeve in one day (selling everything and rebuying = 2.0)
+    max_price_move: 0.5           # a stock moving more than this since the last close is not traded that day

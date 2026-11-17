@@ -15,6 +15,9 @@ every name to yesterday's target (bug audit 2026-11-13).
 Safety: the run stops before any order if the price data is not current (last bar is not the latest completed
 session, or far fewer names have a bar today than yesterday), on a market holiday it exits quietly, and every
 failure that skips or degrades the day is written to data/run_daily_errors.log.
+Right before the orders go out, the safety limits in src/safety.py run (live confirmation, kill switch data/STOP,
+equity sanity, position count, order size, turnover, per-name price check, no margin); a stop sends no orders,
+saves no state and exits with code 4. --allow-full-rebuild waives the equity and turnover limits for one run.
 """
 import argparse
 import gc
@@ -196,6 +199,9 @@ def main():
     ap.add_argument("--force", action="store_true", help="rebalance even if portfolio.rebalance_every_days says to hold today")
     ap.add_argument("--provider", default=None, choices=[None, "yfinance", "tiingo", "norgate"])
     ap.add_argument("--allow-stale", action="store_true", help="trade even if the price data is not the latest session")
+    ap.add_argument("--allow-full-rebuild", action="store_true",
+                    help="waive the equity-change and turnover safety limits for this run (after an account reset, "
+                         "a large deposit, or a model switch that replaces most of the book)")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -411,10 +417,27 @@ def main():
         broker.mark(prices_today)
     else:
         broker = make_broker("alpaca", order_type=order_type)
-        if order_type == "opg":
-            del close, volume, raw_close, feats, labels, membership, gate_membership
-            gc.collect()
-            wait_for_opg_window()
+
+    # safety limits (src/safety.py): any stop means no orders today, no saved state, exit code 4
+    from src import safety
+    prev_prices = raw_close.iloc[-2] if len(raw_close) >= 2 else None
+    sres = safety.check_orders(targets, broker.positions(), broker.equity(),
+                               safety.previous_equity(Path("data/equity.csv"), today), prices_today, prev_prices,
+                               cfg, sleeve_assets=sleeve_assets, skip=skip, allow_rebuild=args.allow_full_rebuild)
+    print(sres.summary(), flush=True)
+    if not sres.ok:
+        if args.dry_run:
+            print(f"dry run: a real run would send NO orders today (exit code {safety.EXIT_CODE})")
+            sys.exit(safety.EXIT_CODE)
+        raise safety.SafetyStop("; ".join(sres.stops))
+    if sres.warnings and not args.dry_run:
+        log_error(f"safety notes on {today.date()}: " + "; ".join(sres.warnings))
+    targets, skip = sres.targets, set(skip) | sres.skip
+
+    if not args.dry_run and order_type == "opg":
+        del close, volume, raw_close, feats, labels, membership, gate_membership
+        gc.collect()
+        wait_for_opg_window()
     orders = broker.submit_targets(targets, prices_today, skip=skip)
     equity = broker.equity()
     cash = equity - float(broker.positions().sum())
@@ -448,6 +471,10 @@ if __name__ == "__main__":
     except DataNotCurrent as e:
         log_error(f"no trading: {e}")
         sys.exit(3)
-    except Exception as e:   # noqa: BLE001 - recorded for the daily check, then the job fails visibly
-        log_error(f"run failed: {type(e).__name__}: {str(e)[:300]}")
-        raise
+    except Exception as e:   # noqa: BLE001
+        from src.safety import EXIT_CODE, SafetyStop
+        if not isinstance(e, SafetyStop):
+            log_error(f"run failed: {type(e).__name__}: {str(e)[:300]}")
+            raise
+        log_error(f"no trading (safety limit): {str(e)[:600]}")
+        sys.exit(EXIT_CODE)
