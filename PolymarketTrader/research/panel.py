@@ -37,12 +37,32 @@ def set_split(date: str) -> None:
     SPLIT_TS = int(pd.Timestamp(date, tz="UTC").timestamp())
 
 
+CENSUS_MARGIN = 1.03       # a market's bars add up to at most 1.023 times its lifetime volume (measured on 9,240 markets)
+
+
+def census_floor(db, category: str) -> float:
+    """Lifetime volume above which EVERY market of the category has been attempted by the download."""
+    v = db.execute("SELECT MAX(volume) FROM markets WHERE category=? AND candles_done=0", (category,)).fetchone()[0]
+    return float(v or 0.0)
+
+
 def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars: int = 2,
-         sample: str = "random", min_volume: float = 1.0) -> pd.DataFrame:
-    """sample="random" (the default) keeps, per category, only the markets drawn in the download's fixed shuffle:
-    those whose shuffle key is below the first key not yet attempted. sample="all" also keeps the markets that
-    were downloaded biggest-first before the shuffle existed; that set is selected on lifetime volume, which is
-    hindsight, and must not be used to judge a rule."""
+         sample: str = "random", min_volume: float = 1.0, min_cumvol: float | None = None) -> pd.DataFrame:
+    """Three samples:
+
+    sample="random" (the default) keeps, per category, only the markets drawn in the download's fixed shuffle:
+    those whose shuffle key is below the first key not yet attempted. It represents every market that ever traded,
+    most of which are tiny.
+
+    sample="liquid" is the census of markets that were ALREADY busy: per category, only the bars at which the
+    market had traded at least `min_cumvol` contracts so far (default: the lowest level at which the download is
+    complete for that category). Every market that ever reached that level is in the download, so nothing is
+    selected on hindsight: a rule sees a market only from the day it qualified. Categories whose download is not
+    complete down to `min_cumvol` are left out. Event structure (favourite, ladder) is computed among the
+    qualifying markets only.
+
+    sample="all" keeps every downloaded bar, including the early, quiet days of markets that were downloaded
+    because they later became big. That selects on lifetime volume, which is hindsight: never judge a rule on it."""
     db = sqlite3.connect(str(db_path), timeout=60)
     cols = {r[1] for r in db.execute("PRAGMA table_info(markets)")}
     where = "WHERE m.candles_done=1"
@@ -50,6 +70,21 @@ def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars
     if categories:
         where += f" AND m.category IN ({','.join('?' * len(categories))})"
         args += categories
+    floors: dict[str, float] = {}
+    if sample == "liquid":
+        cats = categories or [r[0] for r in db.execute("SELECT DISTINCT category FROM markets WHERE candles_done=1")]
+        for c in cats:
+            need = census_floor(db, c) * CENSUS_MARGIN
+            if min_cumvol is None:
+                floors[c] = max(need, 1.0)
+            elif need <= min_cumvol:
+                floors[c] = float(min_cumvol)
+        if not floors:
+            db.close()
+            return pd.DataFrame()
+        parts = " OR ".join(f"(m.category = ? AND m.volume >= {floors[c] / CENSUS_MARGIN:.4f})" for c in floors)
+        where += f" AND ({parts})"
+        args += list(floors)
     if sample == "random" and "rnd" in cols:
         fr = dict(db.execute("SELECT category, MIN(rnd) FROM markets WHERE candles_done=0 AND volume>=? GROUP BY category",
                              (min_volume,)).fetchall())
@@ -57,8 +92,9 @@ def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars
         parts = " OR ".join(f"(m.category = ? AND m.rnd < {int(fr.get(c, 2 ** 32))})" for c in cats)
         where += f" AND ({parts})"
         args += cats
+    sched = "m.exp_ts, m.early" if "early" in cols else "NULL AS exp_ts, NULL AS early"
     mk = pd.read_sql_query(
-        f"""SELECT m.ticker, m.series, m.event, m.category, m.open_ts, m.close_ts, m.result, m.volume AS tot_vol,
+        f"""SELECT m.ticker, m.series, m.event, m.category, m.open_ts, m.close_ts, m.result, m.volume AS tot_vol, {sched},
                    m.strike_type, m.floor_strike, m.cap_strike, s.fee_type, s.fee_multiplier, s.frequency
             FROM markets m LEFT JOIN series s ON s.ticker = m.series {where}""", db, params=args)
     cd = pd.read_sql_query(
@@ -72,6 +108,8 @@ def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars
     mk["y"] = (mk["result"] == "yes").astype("float32")
     mk["mult"] = mk["fee_multiplier"].fillna(1.0).astype("float32")
     mk["maker_fee"] = mk["fee_type"].fillna("").str.contains("maker")
+    mk["early"] = pd.to_numeric(mk["early"], errors="coerce")
+    mk["exp_ts"] = pd.to_numeric(mk["exp_ts"], errors="coerce")
     df = cd.merge(mk.drop(columns=["result", "fee_type", "fee_multiplier"]), on="ticker", how="inner")
     df = df[df["ts"] <= df["close_ts"] + 86400].copy()
 
@@ -79,9 +117,18 @@ def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars
     df["quoted"] = (df["bid"] > 0) & (df["ask"] < 1) & (df["ask"] > df["bid"])
     df["mid"] = np.where(df["quoted"], (df["bid"] + df["ask"]) / 2, np.nan).astype("float32")
     df["spread"] = np.where(df["quoted"], df["ask"] - df["bid"], np.nan).astype("float32")
-    df["dte"] = ((df["close_ts"] - df["ts"]) / 86400.0).astype("float32")          # days to close
+    # Days to the end AS KNOWN AT THE TIME. A market that can close early has its close_time rewritten when it does,
+    # so its only end date known in advance is the expiration; measuring from the actual close would tell a rule
+    # that the event is about to happen. `sched_known` is False where the download has not fetched the schedule
+    # yet (those rows fall back to the actual close and must not be trusted for rules that use days to close).
+    df["sched_known"] = df["early"].isin([0, 1])
+    df["early"] = df["early"] == 1
+    end = np.where(df["early"], np.maximum(df["exp_ts"].fillna(df["close_ts"]), df["close_ts"]), df["close_ts"])
+    df["end_ts"] = end
+    df["dte"] = ((end - df["ts"]) / 86400.0).astype("float32")
+    df["dte_real"] = ((df["close_ts"] - df["ts"]) / 86400.0).astype("float32")     # for holding times only
     df["age"] = ((df["ts"] - df["open_ts"]) / 86400.0).astype("float32")
-    df["life"] = ((df["close_ts"] - df["open_ts"]) / 86400.0).astype("float32")
+    df["life"] = ((end - df["open_ts"]) / 86400.0).astype("float32")
     df["vol"] = df["vol"].fillna(0.0)
     g = df.groupby("ticker", sort=False)
     df["bar"] = g.cumcount()
@@ -91,6 +138,12 @@ def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars
     df["vol7"] = g["vol"].transform(lambda s: s.rolling(7, min_periods=1).sum()).astype("float32")
     df["dvol7"] = (df["vol7"] * df["mid"].fillna(df["px"])).astype("float32")           # dollars traded, last 7 bars
     df["cumvol"] = g["vol"].cumsum().astype("float32")
+
+    if floors:                                      # the liquid census: a market exists from the bar it qualified
+        df = df[df["cumvol"] >= df["category"].map(floors).astype("float32")].copy()
+        if df.empty:
+            return df
+        df.attrs["floors"] = floors
 
     # ---- event structure at the same bar --------------------------------------------------------
     ge = df[df["quoted"]].groupby(["event", "ts"], sort=False)["mid"]
@@ -137,7 +190,7 @@ def ladder(df: pd.DataFrame) -> pd.DataFrame:
     """Threshold ladders: markets of one event that ask "above X?" for a rising X. The next rung up can never be
     MORE likely than this one. For each row, the quotes of the next rung up at the same bar, and the return of the
     pair trade that locks the ordering in (buy YES here, buy NO one rung up; it pays at least 1 whatever happens)."""
-    for col in ("up_bid", "up_ask", "up_mid", "r_pair_tk", "pair_cost"):
+    for col in ("up_bid", "up_ask", "up_mid", "dn_mid", "r_pair_tk", "pair_cost"):
         df[col] = np.float32(np.nan)
     lad = df[(df["strike_type"] == "greater") & df["floor_strike"].notna()].sort_values(["event", "ts", "floor_strike"])
     if lad.empty:
@@ -152,6 +205,7 @@ def ladder(df: pd.DataFrame) -> pd.DataFrame:
     pay = lad["y"] + (1 - up["up_y"])
     df.loc[lad.index, "up_bid"], df.loc[lad.index, "up_ask"] = up["up_bid"].astype("float32"), up["up_ask"].astype("float32")
     df.loc[lad.index, "up_mid"] = up["up_mid"].astype("float32")
+    df.loc[lad.index, "dn_mid"] = g["mid"].shift(1).astype("float32")              # the next rung DOWN: never less likely
     df.loc[lad.index, "pair_cost"] = np.where(ok, cost, np.nan).astype("float32")
     df.loc[lad.index, "r_pair_tk"] = np.where(ok, (pay - cost) / cost, np.nan).astype("float32")
     return df
@@ -164,9 +218,14 @@ def describe(df: pd.DataFrame) -> str:
     lines = [f"{len(m):,} markets, {m['event'].nunique():,} events, {len(df):,} daily bars; "
              f"closes {pd.to_datetime(m['close_ts'].min(), unit='s').date()} to {pd.to_datetime(m['close_ts'].max(), unit='s').date()}; "
              f"{int(m['oos'].sum()):,} markets out of sample (closing from {pd.to_datetime(SPLIT_TS, unit='s').date()})"]
-    by = m.groupby("category").agg(markets=("ticker", "size"), events=("event", "nunique"), yes=("y", "mean"), oos=("oos", "sum"))
+    if df.attrs.get("floors"):
+        lines.append("  liquid census: bars from the day a market had traded at least "
+                     + ", ".join(f"{v:,.0f} contracts ({c})" for c, v in df.attrs["floors"].items()))
+    by = m.groupby("category").agg(markets=("ticker", "size"), events=("event", "nunique"), yes=("y", "mean"), oos=("oos", "sum"),
+                                   early=("early", "mean"), known=("sched_known", "mean"))
     for cat, r in by.iterrows():
-        lines.append(f"  {cat:24s} {int(r.markets):7,} markets {int(r.events):6,} events  resolved yes {r.yes:5.1%}  out of sample {int(r.oos):6,}")
+        lines.append(f"  {cat:24s} {int(r.markets):7,} markets {int(r.events):6,} events  resolved yes {r.yes:5.1%}  out of sample {int(r.oos):6,}"
+                     f"  can close early {r.early:4.0%}" + ("" if r.known > 0.999 else f"  SCHEDULE MISSING FOR {1 - r.known:.0%}"))
     return "\n".join(lines)
 
 

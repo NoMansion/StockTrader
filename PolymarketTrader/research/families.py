@@ -45,6 +45,10 @@ class Features:
         self.dow = ((d["ts"].to_numpy("int64") // 86400 + 4) % 7).astype("int8")          # 0 = Sunday
         self.month = (np.asarray(d["ts"].to_numpy("int64"), "datetime64[s]").astype("datetime64[M]").astype(int) % 12 + 1)
         self.base = self.q & (self.dte > 0.25) & (self.spread <= 0.10)                     # a tradable, live quote
+        self.early = d["early"].to_numpy(bool) if "early" in d else np.zeros(p.n, bool)
+        self.strike = d["strike_type"].fillna("none").to_numpy(object)
+        self.has_strike = d["floor_strike"].notna().to_numpy() | d["cap_strike"].notna().to_numpy()
+        self.lived = np.clip(self.age / np.maximum(self.life, 1e-6), 0, 1)                 # share of scheduled life elapsed
 
     def snapshot(self, days: float) -> np.ndarray:
         """One bar per market: the first tradable bar with `days` or fewer left. Unlike "the first bar at which the
@@ -176,8 +180,92 @@ def f_ladder(f: Features):
         yield "6 ladder", f"pair costs under {1 - x:.2f} after fees", live & (pair_cost < 1 - x), "pair", "pair"
     for eps in (0.0, 0.02, 0.05):
         inv = live & (up_mid >= f.mid + eps) & (f.mid > 0)
+        dn_mid = np.nan_to_num(d["dn_mid"].to_numpy("float32"), nan=9.0)
+        inv_no = live & (f.mid >= dn_mid + eps) & (dn_mid > 0)
         for entry in ENTRIES:
             yield "6 ladder", f"next rung up priced {eps * 100:g}c or more ABOVE this one: buy this rung", inv, "yes", entry
+            yield "6 ladder", f"this rung priced {eps * 100:g}c or more ABOVE the rung below: buy NO on this rung", inv_no, "no", entry
+
+
+# 16. Markets that can close early ("will X happen before ...") against markets with a fixed date
+def f_early(f: Features):
+    for (lo, hi), early, side, entry in itertools.product(PRICE, (True, False), SIDES, ENTRIES):
+        yield ("16 early close", f"{'can close early' if early else 'fixed date'}: mid {name_range(lo * 100, hi * 100, 'c')}",
+               f.base & (f.early == early) & f.price(lo, hi), side, entry)
+
+
+# 18. The shape of the question: "above X", "below X", "between X and Y", or no number at all
+def f_strike(f: Features):
+    kinds = [k for k in sorted(set(f.strike)) if (f.strike == k).sum() >= 2000]
+    for kind, (lo, hi), side, entry in itertools.product(kinds, [(0, 0.05), (0.05, 0.2), (0.2, 0.5), (0.5, 0.8), (0.8, 0.95), (0.95, 1)],
+                                                         SIDES, ENTRIES):
+        yield ("18 question shape", f"strike type {kind}: mid {name_range(lo * 100, hi * 100, 'c')}",
+               f.base & (f.strike == kind) & f.price(lo, hi), side, entry)
+
+
+# 19. Longshots by how many outcomes the event has
+def f_event_size(f: Features):
+    sizes = [(1, 1), (2, 4), (5, 10), (11, 100000)]
+    for (a, b), (lo, hi), side, entry in itertools.product(sizes, [(0, 0.05), (0.05, 0.10), (0.10, 0.20), (0.80, 0.95), (0.95, 1)],
+                                                           SIDES, ENTRIES):
+        tag = f"events of {a}" if a == b else f"events of {a}-{b}" if b < 1000 else f"events of {a}+"
+        yield ("19 price x event size", f"{tag} markets: mid {name_range(lo * 100, hi * 100, 'c')}",
+               f.base & (f.ev_total >= a) & (f.ev_total <= b) & f.price(lo, hi), side, entry)
+
+
+# 22. Outcomes of one event priced to more or less than 1 in total (events without numeric strikes only: a
+#     ladder of "above X" questions adds up to far more than 1 by construction). A proxy: the download does not
+#     carry Kalshi's own "mutually exclusive" flag yet.
+def f_event_sum(f: Features):
+    cat_event = f.base & ~f.has_strike & (f.ev_n >= 3)
+    for x, entry in itertools.product((1.03, 1.06, 1.10, 1.20), ENTRIES):
+        over = cat_event & (f.ev_sum >= x)
+        yield "22 event sum", f"3+ outcomes priced to {x:.2f} or more in total: NO on the non-favourites", over & ~f.fav, "no", entry
+        yield "22 event sum", f"3+ outcomes priced to {x:.2f} or more in total: NO on the favourite", over & f.fav, "no", entry
+    for x, entry in itertools.product((0.97, 0.94, 0.90), ENTRIES):
+        under = cat_event & (f.ev_sum <= x) & (f.ev_sum > 0.5)
+        yield "22 event sum", f"3+ outcomes priced to {x:.2f} or less in total: YES on the favourite", under & f.fav, "yes", entry
+        yield "22 event sum", f"3+ outcomes priced to {x:.2f} or less in total: YES on the non-favourites", under & ~f.fav, "yes", entry
+
+
+# 23. How much had traded SO FAR (known at the time, unlike lifetime volume)
+def f_cumvol(f: Features):
+    vols = [(0, 1000), (1000, 10000), (10000, 100000), (100000, 1e15)]
+    for (v0, v1), (lo, hi), side, entry in itertools.product(vols, [(0, 0.05), (0.05, 0.2), (0.2, 0.8), (0.8, 0.95), (0.95, 1)], SIDES, ENTRIES):
+        tag = f"{v0:g}+" if v1 > 1e14 else f"{v0:g}-{v1:g}"
+        yield ("23 traded so far", f"{tag} contracts so far: mid {name_range(lo * 100, hi * 100, 'c')}",
+               f.base & (f.cumvol >= v0) & (f.cumvol < v1) & f.price(lo, hi), side, entry)
+
+
+# 24. Where in its scheduled life the market is
+def f_life(f: Features):
+    for (a, b), (lo, hi), side, entry in itertools.product([(0, 0.1), (0.1, 0.5), (0.5, 0.9), (0.9, 1.01)],
+                                                           [(0, 0.05), (0.05, 0.2), (0.2, 0.8), (0.8, 0.95), (0.95, 1)], SIDES, ENTRIES):
+        yield ("24 share of life", f"{a:.0%}-{min(b, 1):.0%} of scheduled life elapsed: mid {name_range(lo * 100, hi * 100, 'c')}",
+               f.base & (f.lived >= a) & (f.lived < b) & f.price(lo, hi), side, entry)
+
+
+# 25. Selling longshots (buying NO under 10c), crossed with everything that might sharpen or spoil it
+def f_longshot(f: Features):
+    for (lo, hi), entry in itertools.product([(0.0, 0.03), (0.03, 0.06), (0.06, 0.10), (0.10, 0.15)], ENTRIES):
+        cheap = f.base & (f.mid > lo) & (f.mid <= hi)
+        tag = f"NO at mid {name_range(lo * 100, hi * 100, 'c')}"
+        for (d0, d1) in [(0, 7), (7, 30), (30, 90), (90, 10000)]:
+            for early in (True, False):
+                yield ("25 longshot NO", f"{tag}, {name_range(d0, d1, 'd')} to scheduled end, {'can close early' if early else 'fixed date'}",
+                       cheap & f.days(d0, d1) & (f.early == early), "no", entry)
+        for k, sign in itertools.product((1, 7), (1, -1)):
+            mom = f.mom[k]
+            yield ("25 longshot NO", f"{tag}, {'up' if sign > 0 else 'down'} 1c+ in {k}d",
+                   cheap & ((mom >= 0.01) if sign > 0 else (mom <= -0.01)), "no", entry)
+        for v0, v1 in [(0, 200), (200, 2000), (2000, 1e15)]:
+            yield ("25 longshot NO", f"{tag}, ${v0:g}{'+' if v1 > 1e14 else '-' + format(v1, 'g')} traded in 7d",
+                   cheap & (f.dvol7 >= v0) & (f.dvol7 < v1), "no", entry)
+        for s0, s1 in [(0, 0.011), (0.011, 0.03), (0.03, 0.10)]:
+            yield ("25 longshot NO", f"{tag}, spread {name_range(s0 * 100, s1 * 100, 'c')}", cheap & (f.spread >= s0) & (f.spread < s1), "no", entry)
+        for fav in (True, False):
+            yield ("25 longshot NO", f"{tag}, {'the favourite' if fav else 'not the favourite'} of a 3+ market event",
+                   cheap & (f.ev_total >= 3) & (f.fav == fav), "no", entry)
 
 
 # 14. Combinations of the single-factor conditions
@@ -216,6 +304,13 @@ def all_rules(f: Features, titles: np.ndarray):
     yield from f_calendar(f)
     yield from f_ladder(f)
     yield from f_combos(f)
+    yield from f_early(f)
+    yield from f_strike(f)
+    yield from f_event_size(f)
+    yield from f_event_sum(f)
+    yield from f_cumvol(f)
+    yield from f_life(f)
+    yield from f_longshot(f)
 
 
 # 11. Persistence: is a series that paid one side in the first half still paying it in the second?

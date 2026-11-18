@@ -37,12 +37,16 @@ def main() -> int:
     ap.add_argument("--categories", default="")
     ap.add_argument("--min-events", type=int, default=100)
     ap.add_argument("--split", default="", help="in/out-of-sample boundary (default 2026-04-01)")
+    ap.add_argument("--sample", default="random", choices=["random", "liquid"],
+                    help="random: every market that ever traded; liquid: only bars after a market had traded --min-cumvol")
+    ap.add_argument("--min-cumvol", type=float, default=None, help="liquid sample: contracts traded so far (default: per "
+                    "category, the lowest level the download is complete at)")
     args = ap.parse_args()
     cats = [c.strip() for c in args.categories.split(",") if c.strip()] or None
     t0 = time.time()
     if args.split:
         panel.set_split(args.split)
-    df = panel.load(args.db, cats)
+    df = panel.load(args.db, cats, sample=args.sample, min_cumvol=args.min_cumvol)
     print(panel.describe(df))
     if df.empty:
         return 1

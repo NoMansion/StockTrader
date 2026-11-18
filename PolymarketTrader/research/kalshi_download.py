@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS series (ticker TEXT PRIMARY KEY, category TEXT, title
     frequency TEXT, tags TEXT, markets_done INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS markets (ticker TEXT PRIMARY KEY, series TEXT, event TEXT, category TEXT, title TEXT, sub TEXT,
     open_ts INTEGER, close_ts INTEGER, result TEXT, settle REAL, volume REAL, open_interest REAL, last_price REAL,
-    strike_type TEXT, floor_strike REAL, cap_strike REAL, src TEXT, candles_done INTEGER DEFAULT 0, rnd INTEGER);
+    strike_type TEXT, floor_strike REAL, cap_strike REAL, src TEXT, candles_done INTEGER DEFAULT 0, rnd INTEGER,
+    exp_ts INTEGER, early INTEGER);
 CREATE INDEX IF NOT EXISTS markets_series ON markets (series);
 CREATE INDEX IF NOT EXISTS markets_todo ON markets (candles_done, category, volume);
 CREATE TABLE IF NOT EXISTS candles (ticker TEXT, ts INTEGER, bid REAL, ask REAL, bid_hi REAL, bid_lo REAL, ask_hi REAL,
@@ -101,7 +102,16 @@ def market_row(m, series, category, src):
             ts(m.get("open_time")), ts(m.get("close_time")), m.get("result"),
             num(first(m, "settlement_value_dollars", "settlement_value")), num(first(m, "volume_fp", "volume")),
             num(first(m, "open_interest_fp", "open_interest")), num(first(m, "last_price_dollars", "last_price")),
-            m.get("strike_type"), num(m.get("floor_strike")), num(m.get("cap_strike")), src, shuffle_key(m["ticker"]))
+            m.get("strike_type"), num(m.get("floor_strike")), num(m.get("cap_strike")), src, shuffle_key(m["ticker"]),
+            *schedule(m))
+
+
+def schedule(m):
+    """(scheduled end, may close early). close_time is rewritten when a market closes early, so for a market that
+    can close early the only end date that was known in advance is its expiration. A backtest that measures "days
+    to close" from the actual close of such a market knows the event is about to happen."""
+    return (ts(first(m, "expected_expiration_time", "expiration_time", "latest_expiration_time")),
+            1 if m.get("can_close_early") else 0)
 
 
 def phase_markets(db, k, categories, max_per_series, which):
@@ -134,8 +144,8 @@ def phase_markets(db, k, categories, max_per_series, which):
                     return
                 time.sleep(60)
         db.executemany("INSERT OR IGNORE INTO markets (ticker, series, event, category, title, sub, open_ts, close_ts, result, "
-                       "settle, volume, open_interest, last_price, strike_type, floor_strike, cap_strike, src, rnd) "
-                       "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", batch)
+                       "settle, volume, open_interest, last_price, strike_type, floor_strike, cap_strike, src, rnd, exp_ts, early) "
+                       "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", batch)
         if ok:
             failures = 0
             db.execute("UPDATE series SET markets_done = markets_done | ? WHERE ticker=?", (bit, series))
@@ -144,6 +154,35 @@ def phase_markets(db, k, categories, max_per_series, which):
             total = db.execute("SELECT COUNT(*) FROM markets").fetchone()[0]
             log(f"markets[{which}]: {i}/{len(todo)} series, {total} markets so far ({cat} {series}: {len(batch)}); "
                 f"{k.requests} requests, {k.rate_limited} rate limits, interval {k.min_interval:.2f}s")
+
+
+def phase_backfill(db, k, categories, census_volume):
+    """Markets listed before the schedule columns existed: read their series again and fill the two columns in.
+    Only series that matter to a backtest (a market with bars, or one big enough for the census)."""
+    todo = db.execute(f"SELECT DISTINCT series FROM markets WHERE early IS NULL AND src='hist' AND "
+                      f"(candles_done=1 OR volume>=?) AND category IN ({','.join('?' * len(categories))}) ORDER BY series",
+                      [census_volume] + categories).fetchall()
+    if not todo:
+        return
+    log(f"backfill: scheduled end dates for {len(todo)} series")
+    failures = 0
+    for i, (series,) in enumerate(todo):
+        try:
+            rows = [(*schedule(m), m["ticker"]) for m in k.pages("/historical/markets", "markets", tries=3, series_ticker=series)]
+            db.executemany("UPDATE markets SET exp_ts=?, early=? WHERE ticker=?", rows)
+            failures = 0
+        except KalshiError as e:
+            failures += 1
+            log(f"backfill: {series}: {e}")
+            if failures >= 5:
+                break
+            time.sleep(60)
+        # whatever the archive no longer lists must not be asked for again
+        db.execute("UPDATE markets SET early=-1 WHERE series=? AND early IS NULL AND src='hist'", (series,))
+        db.commit()
+        if i % 200 == 0:
+            log(f"backfill: {i}/{len(todo)} series; {k.requests} requests, {k.rate_limited} rate limits")
+    log("backfill: done")
 
 
 def candle_rows(ticker, cs):
@@ -159,15 +198,18 @@ def candle_rows(ticker, cs):
     return [r for r in out if r[1]]
 
 
-def phase_candles(db, k, categories, min_volume, max_markets, max_days):
+def phase_candles(db, k, categories, min_volume, max_markets, max_days, biggest_first=False):
+    """biggest_first=False: the fixed random order (the random sample). True: every market with at least
+    min_volume lifetime contracts, biggest first (the census of busy markets; research/panel.py, sample="liquid")."""
+    order = "volume DESC" if biggest_first else "rnd"
     done = 0
     cats = [c for c in categories if db.execute("SELECT 1 FROM markets WHERE category=? AND candles_done=0 AND volume>=? LIMIT 1",
                                                 (c, min_volume)).fetchone()]
-    log(f"candles: categories with work: {cats}")
+    log(f"candles ({'census, volume >= %g' % min_volume if biggest_first else 'random order'}): categories with work: {cats}")
     while cats and done < max_markets:
-        for cat in list(cats):                      # round-robin across categories, biggest markets first
+        for cat in list(cats):                      # round-robin across categories
             rows = db.execute("SELECT ticker, series, open_ts, close_ts, src FROM markets WHERE category=? AND candles_done=0 "
-                              "AND volume>=? ORDER BY rnd LIMIT 40", (cat, min_volume)).fetchall()
+                              f"AND volume>=? ORDER BY {order} LIMIT 40", (cat, min_volume)).fetchall()
             if not rows:
                 cats.remove(cat)
                 continue
@@ -211,6 +253,11 @@ def main():
                     help="lifetime contracts traded; keep it at 1 (any trade at all): a higher bar selects on hindsight")
     ap.add_argument("--max-markets", type=int, default=10 ** 9)
     ap.add_argument("--first-pass", type=int, default=4000, help="markets per category to get bars for in the first pass")
+    ap.add_argument("--census-volume", type=float, default=5000.0,
+                    help="after the random pass, also fetch EVERY market with at least this many lifetime contracts, biggest "
+                         "first (0 = off). Valid without hindsight only for rules that look at a market after it has traded "
+                         "that much: panel.load(sample='liquid') enforces it")
+    ap.add_argument("--census-max", type=int, default=8000, help="census markets per category")
     ap.add_argument("--max-per-series", type=int, default=200000)
     ap.add_argument("--max-days", type=int, default=400)
     ap.add_argument("--interval", type=float, default=0.2, help="seconds between requests")
@@ -219,8 +266,12 @@ def main():
     Path(args.db).parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(args.db, timeout=60)
     db.executescript(SCHEMA)
-    if "rnd" not in {r[1] for r in db.execute("PRAGMA table_info(markets)")}:      # databases from before the shuffle
+    have_cols = {r[1] for r in db.execute("PRAGMA table_info(markets)")}
+    if "rnd" not in have_cols:                      # databases from before the shuffle
         db.execute("ALTER TABLE markets ADD COLUMN rnd INTEGER")
+    for col in ("exp_ts", "early"):                 # ... and from before the scheduled end date was kept
+        if col not in have_cols:
+            db.execute(f"ALTER TABLE markets ADD COLUMN {col} INTEGER")
     todo = db.execute("SELECT ticker FROM markets WHERE rnd IS NULL").fetchall()
     if todo:
         db.executemany("UPDATE markets SET rnd=? WHERE ticker=?", [(shuffle_key(t[0]), t[0]) for t in todo])
@@ -231,14 +282,21 @@ def main():
     if args.phase in ("all", "series"):
         phase_series(db, k, cats)
     if args.phase == "all":
+        phase_backfill(db, k, cats, args.census_volume)        # everything listed before the schedule columns existed
         # First pass, one category at a time: list its markets, then fetch bars for its biggest ones. Analysis can
         # start on the first categories while the later ones are still downloading.
         for cat in cats:
             phase_markets(db, k, [cat], args.max_per_series, "hist")
+            phase_backfill(db, k, [cat], args.census_volume)
             have = db.execute("SELECT COUNT(*) FROM markets WHERE category=? AND volume>=? AND rnd<?",
                               (cat, args.min_volume, frontier(db, cat, args.min_volume))).fetchone()[0]
             if have < args.first_pass:              # a restart does not repeat a category's first pass
                 phase_candles(db, k, [cat], args.min_volume, args.first_pass - have, args.max_days)
+            if args.census_volume > 0:
+                got = db.execute("SELECT COUNT(*) FROM markets WHERE category=? AND volume>=? AND candles_done<>0",
+                                 (cat, args.census_volume)).fetchone()[0]
+                if got < args.census_max:
+                    phase_candles(db, k, [cat], args.census_volume, args.census_max - got, args.max_days, biggest_first=True)
     if args.phase in ("all", "markets"):                # also picks up any series a throttled pass left behind
         phase_markets(db, k, cats, args.max_per_series, "hist")
     if args.phase in ("all", "candles"):

@@ -43,9 +43,9 @@ def make_db(path, n_events=1500, seed=7, longshot_bias=0.0):
                 ts = close - (12 - b) * DAY
                 bars.append((tk, ts, bid, ask, bid, bid, ask, ask, mid, mid, mid, 100.0, 500.0, bid, ask, mid))
             y = "yes" if rng.random() < p else "no"
-            db.execute("INSERT INTO markets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)",
+            db.execute("INSERT INTO markets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,0)",
                        (tk, "S", f"S-{e}", "Economics", f"Will {tk} happen before June?", "x", close - 13 * DAY, close, y,
-                        1.0 if y == "yes" else 0.0, 5000.0, 500.0, 0.5, None, None, None, "hist", shuffle_key(tk)))
+                        1.0 if y == "yes" else 0.0, 5000.0, 500.0, 0.5, None, None, None, "hist", shuffle_key(tk), close + 3600))
             db.executemany("INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", bars)
     db.commit()
     db.close()
@@ -154,3 +154,42 @@ def test_only_the_random_sample_is_used_by_default(tmp_path):
     everything = panel.load(path, sample="all")
     assert rnd_sample["ticker"].nunique() == len(keys) // 2
     assert everything["ticker"].nunique() == len(keys) // 2 + 5
+
+
+def test_the_liquid_census_shows_a_market_only_from_the_day_it_qualified(tmp_path):
+    """A market downloaded because it ended up big must not lend its early, quiet days to a backtest."""
+    path = tmp_path / "l.db"
+    make_db(path, n_events=40)
+    db = sqlite3.connect(str(path))
+    db.execute("UPDATE markets SET volume=1200")                    # what the 12 bars of 100 add up to
+    db.execute("UPDATE markets SET volume=300, candles_done=0 WHERE ticker='S-0-0'")    # a small one not fetched yet
+    db.commit()
+    liquid = panel.load(path, sample="liquid", min_cumvol=600)
+    assert liquid["cumvol"].min() >= 600 and liquid.groupby("ticker")["bar"].min().eq(5).all()
+    assert liquid["ticker"].nunique() == 40 * 3 - 1
+    assert liquid["mom3"].notna().any()                             # signals may still look back before that day
+    # default level: the lowest one the download is complete at
+    assert panel.load(path, sample="liquid")["cumvol"].min() >= 300
+    # one market of 1,200 contracts not fetched: the census is not complete at 600, so the category is left out
+    db.execute("UPDATE markets SET candles_done=0 WHERE ticker='S-1-0'")
+    db.commit()
+    db.close()
+    assert panel.load(path, sample="liquid", min_cumvol=600).empty
+
+
+def test_days_to_close_come_from_the_schedule_not_from_an_early_close(tmp_path):
+    """A market that closed early must not tell a rule, through 'days to close', that its event was about to happen."""
+    path = tmp_path / "e.db"
+    make_db(path, n_events=20)
+    db = sqlite3.connect(str(path))
+    close = db.execute("SELECT close_ts FROM markets WHERE ticker='S-0-0'").fetchone()[0]
+    db.execute("UPDATE markets SET early=1, exp_ts=? WHERE ticker='S-0-0'", (close + 400 * DAY,))
+    db.execute("UPDATE markets SET early=NULL WHERE ticker='S-1-0'")           # schedule not downloaded yet
+    db.commit()
+    db.close()
+    d = panel.load(path, sample="all")
+    e = d[d["ticker"] == "S-0-0"]
+    assert e["dte"].min() > 399 and e["dte_real"].min() < 2 and e["early"].all()
+    other = d[d["ticker"] == "S-0-1"]
+    assert (other["dte"] == other["dte_real"]).all() and other["sched_known"].all()
+    assert not d[d["ticker"] == "S-1-0"]["sched_known"].any()
