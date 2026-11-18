@@ -35,11 +35,11 @@ universe:
   # Crypto, Economics, Politics, Commodities, Mentions, Climate and Weather, Science and Technology, Companies,
   # Health, Social, World. The allow list decides what is downloaded at all.
   # Left out on purpose. Sports: retail specialists are the least profitable group. Crypto and Financials: mostly
-  # daily price-range markets, which are bot territory. Entertainment: award shows and charts, leak-prone.
+  # daily price-range markets, which are bot territory; Commodities is the same thing for gold and oil. Entertainment: award shows and charts, leak-prone.
   # Mentions: a specialist game. Climate and Weather: model against model, not a reading game.
   # Polymarket US instead uses: [macro, finance, technology, politics, geopolitics, science]
-  categories_allow: [economics, politics, elections, companies, commodities, science and technology, health, world]
-  categories_deny: [sports, esports, crypto, financials, entertainment, culture, climate and weather, climate, weather, mentions]
+  categories_allow: [economics, politics, elections, companies, science and technology, health, world]
+  categories_deny: [sports, esports, crypto, financials, commodities, entertainment, culture, climate and weather, climate, weather, mentions]
   max_markets_per_event: 2
   max_events_scanned: 2000
   max_candidates_per_cycle: 4     # forecasts per cycle; each is `forecaster.runs` Claude runs

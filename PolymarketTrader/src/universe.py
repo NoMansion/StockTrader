@@ -35,10 +35,9 @@ DEFAULTS = {
     # Categories as the exchange names them (seen live 2026-11-18: sports, politics, culture, macro, technology,
     # crypto, finance, geopolitics, science, climate). The allow list is also sent to the exchange, so the
     # thousands of sports events are never downloaded. Empty allow list = everything not denied.
-    "categories_allow": ["economics", "politics", "elections", "companies", "commodities", "science and technology",
-                         "health", "world"],
-    "categories_deny": ["sports", "esports", "crypto", "financials", "entertainment", "culture", "climate and weather",
-                        "climate", "weather", "mentions"],
+    "categories_allow": ["economics", "politics", "elections", "companies", "science and technology", "health", "world"],
+    "categories_deny": ["sports", "esports", "crypto", "financials", "commodities", "entertainment", "culture",
+                        "climate and weather", "climate", "weather", "mentions"],
     # Title patterns (regular expressions, case-insensitive) that drop a market whatever its category.
     "title_deny": [
         r"\bup or down\b", r"\b(5|15|30)[- ]?min", r"\bhourly\b",                       # short-dated price bets
@@ -47,7 +46,7 @@ DEFAULTS = {
         r"\b(strike|strikes|invade|invasion|airstrike|missile|troops|nuclear test|ceasefire)\b",      # military / insider-prone
         r"\b(resign|resigns|fired|step down|steps down|out as|announced out|out of (their|his|her)|leave office|leaves office|pardon|pardons|nominate|nominee)\b",  # personnel decisions
         # the forecaster does not bet on its own maker, nor on how AI models and their makers rank against each other
-        r"\b(anthropic|claude|openai|chatgpt|gpt-?\d|gemini|grok|llm)\b|\bai (coding )?model\b|\bai company\b",
+        r"\b(anthropic|claude|openai|chatgpt|gpt-?\d|gemini|grok|llm)\b|\bai (coding )?model\b|\bai company\b|\b(best|top) ai\b",
         r"\b(acquire|acquires|acquisition|merger|merge with|ipo|buyback)\b",                        # corporate announcements
     ],
     "max_markets_per_event": 2,

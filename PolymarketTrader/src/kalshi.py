@@ -45,7 +45,9 @@ def market_from_kalshi(m: dict, series_info: dict | None = None, event: dict | N
     title = (m.get("title") or "").strip()
     sub = (m.get("yes_sub_title") or "").strip()
     ev_title = (event.get("title") or "").strip() or None
-    question = title or f"{ev_title or m.get('ticker')}: {sub}"
+    question = title or f"{ev_title or m.get('ticker')}"
+    if sub and sub.lower() not in question.lower() and sub.lower() not in ("yes", "no"):
+        question = f"{question} [{sub}]"            # which outcome of the event this market is about
     rules = "\n\n".join(x.strip() for x in (m.get("rules_primary") or "", m.get("rules_secondary") or "",
                                             m.get("early_close_condition") or "") if x and x.strip())
     sources = [f"{s.get('name')} ({s.get('url')})" for s in event.get("settlement_sources") or [] if s.get("name")]

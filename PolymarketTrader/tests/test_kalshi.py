@@ -17,7 +17,9 @@ def test_real_market_parses():
     m = market_from_kalshi(FX["listing_market"], FX["series"]["series"], FX["event"])
     assert m.market_id == "KXCPIYOY-26NOV-T3.6" and m.event_id == "KXCPIYOY-26NOV" and series_of(m.event_id) == "KXCPIYOY"
     assert m.category == "economics" and m.outcome == "Above 3.6%" and m.status == "MARKET_STATUS_OPEN"
-    assert "CPI inflation be above 3.6%" in m.question
+    assert "CPI inflation be above 3.6%" in m.question and "[" not in m.question    # the title already names the outcome
+    best = market_from_kalshi({**FX["listing_market"], "title": "Best AI on Dec 31, 2026?", "yes_sub_title": "Google"})
+    assert best.question == "Best AI on Dec 31, 2026? [Google]"
     assert "Bureau of Labor Statistics" in m.rules and "bls.gov" in m.rules
     assert (m.best_bid, m.best_ask, m.tick) == (0.80, 0.81, 0.01)
     assert m.fee_rate == pytest.approx(0.07) and m.maker_fee_rate == pytest.approx(0.0175)    # this series charges makers

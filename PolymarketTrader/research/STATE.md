@@ -37,7 +37,7 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 
 | Job | Command (from `PolymarketTrader/`) | Log |
 |---|---|---|
-| Kalshi history download | `setsid nohup python3 -u research/kalshi_download.py --interval 0.4 --min-volume 200 >> data/kalshi_download.log 2>&1 < /dev/null &` | `data/kalshi_download.log` |
+| Kalshi history download | `setsid nohup python3 -u research/kalshi_download.py --interval 0.4 --min-volume 200 --first-pass 2500 >> data/kalshi_download.log 2>&1 < /dev/null &` | `data/kalshi_download.log` |
 
 Check with `pgrep -af kalshi_download` and `tail -3 data/kalshi_download.log`. It is resumable: if it died, run
 the same command again. If `data/` is gone (new container), run it again from scratch; listing takes about 1.5

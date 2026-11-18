@@ -212,7 +212,9 @@ def main():
         # start on the first categories while the later ones are still downloading.
         for cat in cats:
             phase_markets(db, k, [cat], args.max_per_series, "hist")
-            phase_candles(db, k, [cat], args.min_volume, args.first_pass, args.max_days)
+            have = db.execute("SELECT COUNT(*) FROM markets WHERE category=? AND candles_done>0", (cat,)).fetchone()[0]
+            if have < args.first_pass:              # a restart does not repeat a category's first pass
+                phase_candles(db, k, [cat], args.min_volume, args.first_pass - have, args.max_days)
     if args.phase in ("all", "markets"):                # also picks up any series a throttled pass left behind
         phase_markets(db, k, cats, args.max_per_series, "hist")
     if args.phase in ("all", "candles"):
