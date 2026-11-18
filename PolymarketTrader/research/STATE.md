@@ -195,6 +195,10 @@ Forward-only (cannot be backtested):
 2. **Re-test the 5-cent rule on every new category and at the lower census level** (Economics is being extended
    to 5,000 contracts): `python3 research/analyze_rule.py --sample liquid --categories <Cat> --rule "NO at mid <= 5c,
    <= 30d, spread <= 5c" --side no --entry tk` (and `mk`). A category where it fails is a result too: write it.
+2b. **Calibration curve** (report 3.10): `python3 research/calibration_curve.py --sample liquid --categories <Cat>`.
+   Re-measure at the lowest complete census level and on each new category. Candidate change for the bot (NOT
+   applied, needs the user's yes and the evidence at the bot's own liquidity bar): start the blend from a price
+   corrected by the measured gap where YES is under 35c in a busy market.
 3. Leads to follow on the busy sample: NO where YES is 5 to 35c, resting (+6% / +6%, t 2.1 out of sample, thin);
    NO at 3 to 10c after a fall of 3c+ (momentum cross). They need more events: wait for more categories.
 4. Forward: `tail -20 data/run_cycle.log`; `python3 scripts/shadow_longshot.py --report`; commit

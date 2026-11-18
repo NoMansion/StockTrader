@@ -367,3 +367,38 @@ The tail test passes in both halves: even the pessimistic loss rate is below bre
   3:56 pm: 4 forecasts, no order (3 low confidence, 1 edge of 0.9 points against the 3 required). Six of eight
   forecasts were marked low-confidence by the forecaster itself. The order has not filled.
 
+### 3.10 How far the price is from the truth (4:55 pm CST)
+
+Returns mix three things: the level of the price, the spread and the fee. This table takes the last two out. For
+each market, at the first tradable bar on which the mid was in the band: the mid, and how often YES happened
+(`research/calibration_curve.py`; errors clustered by event).
+
+| YES mid | Busy markets (45,000+ contracts), in sample | | | Busy, out of sample | | | Random markets, in / out |
+|---|---|---|---|---|---|---|---|
+| | mid | YES happened | gap (t) | mid | YES happened | gap (t) | gap |
+| 0 to 5c | 3.5% | 1.2% | −2.2 (−6.0) | 3.1% | 1.3% | −1.9 (−3.4) | −1.4 / +0.1 |
+| 5 to 10c | 7.8% | 3.5% | −4.2 (−6.2) | 7.8% | 4.2% | −3.5 (−2.9) | −1.1 / +0.7 |
+| 10 to 20c | 15.5% | 10.0% | −5.5 (−4.4) | 15.1% | 11.7% | −3.4 (−1.6) | −0.7 / +0.8 |
+| 20 to 35c | 27.7% | 23.2% | −4.5 (−2.3) | 27.7% | 22.1% | −5.6 (−1.6) | −1.3 / −1.5 |
+| 35 to 50c | 41.9% | 38.5% | −3.4 (−1.4) | 41.8% | 38.7% | −3.0 (−0.6) | −0.1 / +3.4 |
+| 50 to 65c | 57.1% | 54.8% | −2.3 (−0.9) | 57.4% | 55.6% | −1.8 (−0.3) | −2.1 / +2.7 |
+| 65 to 80c | 71.2% | 70.9% | −0.2 (−0.1) | 72.2% | 71.2% | −1.0 (−0.2) | −0.8 / −2.7 |
+| 80 to 90c | 84.6% | 86.6% | +2.0 (+1.0) | 84.9% | 84.4% | −0.5 (−0.1) | +2.5 / −4.0 |
+| 90 to 95c | 92.2% | 94.6% | +2.4 (+1.7) | 92.2% | 94.1% | +1.9 (+0.7) | +3.1 / −0.3 |
+| 95 to 100c | 96.5% | 98.5% | +2.0 (+2.6) | 96.9% | 96.8% | −0.2 (−0.1) | −1.0 / +1.6 |
+
+Gaps are in percentage points. Busy: Economics and Politics, 1,105 events. Random: the same two categories,
+1,760 events.
+
+- **In busy markets a YES priced under 50 cents happened about 2 to 5 points less often than its price said,** in
+  both halves. Under 10 cents it is established (t of −6 in sample, −3 out). Between 10 and 50 cents the size
+  is the same but the out-of-sample evidence is thin (t of −0.6 to −1.6 on 80 to 122 events).
+- **In the exchange as a whole the price is about right.** No gap in the random sample is distinguishable from
+  zero in both halves. The mispricing lives where the volume is.
+- **What it means for the forecast bot (not applied).** The bot treats the market price as its starting point
+  and moves 30% of the way to Claude's number. In a busy market with YES under about 35 cents, the evidence says
+  the starting point itself is 3 to 5 points high. A bot that started from a corrected price would lean toward NO
+  there before Claude says anything. I have not changed it: the out-of-sample support above 10 cents is
+  weak, the bot's own "busy" bar ($1,000 traded) is lower than the level tested here, and the correction
+  should first be re-measured at that level and on more categories. It is on the list.
+
