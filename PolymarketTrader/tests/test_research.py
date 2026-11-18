@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "research"))
 import panel  # noqa: E402
 from backtest import Panel, row, verdict  # noqa: E402
 from families import Features, all_rules  # noqa: E402
-from kalshi_download import SCHEMA  # noqa: E402
+from kalshi_download import SCHEMA, shuffle_key  # noqa: E402
 
 DAY = 86400
 
@@ -43,9 +43,9 @@ def make_db(path, n_events=1500, seed=7, longshot_bias=0.0):
                 ts = close - (12 - b) * DAY
                 bars.append((tk, ts, bid, ask, bid, bid, ask, ask, mid, mid, mid, 100.0, 500.0, bid, ask, mid))
             y = "yes" if rng.random() < p else "no"
-            db.execute("INSERT INTO markets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+            db.execute("INSERT INTO markets VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)",
                        (tk, "S", f"S-{e}", "Economics", f"Will {tk} happen before June?", "x", close - 13 * DAY, close, y,
-                        1.0 if y == "yes" else 0.0, 5000.0, 500.0, 0.5, None, None, None, "hist"))
+                        1.0 if y == "yes" else 0.0, 5000.0, 500.0, 0.5, None, None, None, "hist", shuffle_key(tk)))
             db.executemany("INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", bars)
     db.commit()
     db.close()
@@ -135,3 +135,22 @@ def test_account_replay_locks_money_until_settlement(tmp_path):
     # one bet, by hand: $1,000, 1% stake, return +20% -> $1,002
     one = portfolio.simulate(np.array([[0.0, 86400.0, 0.20, 1.0]]), stake_frac=0.01)
     assert one.bets == 1 and one.total == pytest.approx(0.002)
+
+
+def test_only_the_random_sample_is_used_by_default(tmp_path):
+    """Markets downloaded out of shuffle order (the old biggest-first way) sit beyond the first unattempted key and
+    must not enter a backtest unless asked for."""
+    path = tmp_path / "s.db"
+    make_db(path, n_events=60)
+    db = sqlite3.connect(str(path))
+    keys = sorted(r[0] for r in db.execute("SELECT rnd FROM markets"))
+    cut = keys[len(keys) // 2]
+    # pretend the half with the larger keys has not been attempted, except five "big" markets fetched out of order
+    db.execute("UPDATE markets SET candles_done=0 WHERE rnd >= ?", (cut,))
+    db.execute("UPDATE markets SET candles_done=1 WHERE ticker IN (SELECT ticker FROM markets WHERE rnd >= ? ORDER BY rnd DESC LIMIT 5)", (cut,))
+    db.commit()
+    db.close()
+    rnd_sample = panel.load(path)
+    everything = panel.load(path, sample="all")
+    assert rnd_sample["ticker"].nunique() == len(keys) // 2
+    assert everything["ticker"].nunique() == len(keys) // 2 + 5

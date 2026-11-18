@@ -17,6 +17,10 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 
 ## Rules for judging a result (do not relax these)
 
+0. **Use only the random sample.** `panel.load()` does this by default. The first 5,840 markets were downloaded
+   biggest-first, which selects on lifetime volume (hindsight) and over-samples surprises: results from them
+   (report 3.1 to 3.5) are provisional. Never pass `sample="all"` to judge a rule, and never filter on
+   `tot_vol`: use `cumvol` or `dvol7`, which are known at the bar.
 1. **Costs in.** Taker entries pay the ask plus Kalshi's fee, 0.07 × p × (1 − p) per contract (some series carry
    a different multiplier: `series.fee_multiplier`). Maker entries are counted only when a later bar shows the
    price trading through the order, and are reported separately from taker results.
@@ -37,9 +41,20 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 
 Start whatever is not running, at any time: **`bash research/start_jobs.sh`** (from `PolymarketTrader/`). It
 starts the Kalshi history download (resumable; log `data/kalshi_download.log`) and the paper loop
-(`scripts/paper_loop.py`, one cycle every 3 h by the ledger's clock; log `data/run_cycle.log`). The worker of this
-session restarts now and then and kills them; a second scheduled check-in ("PolymarketTrader job watchdog", at
-minute 21) runs the script every hour too.
+(`scripts/paper_loop.py`, one cycle every 3 h by the ledger's clock; log `data/run_cycle.log`).
+
+**THE MACHINE SLEEPS WHEN THE SESSION IS IDLE** (found 20:21: `uptime` showed 3 minutes; the download's last write
+was 2 minutes after the previous turn ended). Detached jobs do not keep it awake. A task tracked by the session
+does. So EVERY check-in, after `start_jobs.sh`, must leave this running as a Bash call with
+`run_in_background: true` and `timeout: 7200000`:
+
+```
+cd /home/user/StockTrader/PolymarketTrader && n=0; while pgrep -f "research/kalshi_download.py" > /dev/null && [ $n -lt 115 ]; do sleep 60; n=$((n+1)); done; date -u +%T; uptime; tail -1 data/kalshi_download.log | cut -c1-160
+```
+
+It ends after about two hours (or when the download stops) and its completion notice is the cue to restart both.
+The "PolymarketTrader job watchdog" check-in (minute 21) should do the same: run the script, then leave the
+keep-awake task running.
 
 The paper loop is the forward test of Claude's forecasts (family 17). Its ledger is `data/pmt.db` (not committed);
 `python3 scripts/export_forecasts.py` writes the durable copy, `reports/forward_log.csv`, which IS committed: run it
@@ -97,6 +112,12 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   two Economics leads: both dropped (report 3.4). Rule for the future: any lead gets a year-by-year and
   concentration table before another round is spent on it.
 
+- 20:55 (check-in 4): keep-awake confirmed (machine up 32 min, Politics 680 -> 1,840 markets). Round r04 (Politics;
+  Economics + Politics): 1 pass, 49 leads, 50 lose, the same "dear side loses" pattern in both categories.
+  THEN FOUND THE SAMPLING FLAW (report 3.5). Download switched to a fixed random order (`rnd` = crc32 of the
+  ticker), minimum volume 1, first pass 2,500 random markets per category, Economics first. Panel uses the
+  random sample only. Next round must be on the random sample and must say whether the r02-r04 pattern survives.
+
 ## How to run a round
 
 ```
@@ -140,17 +161,16 @@ Forward-only (cannot be backtested):
 
 ## Next actions
 
-1. Rerun the sweep as data lands: `python3 research/run_sweep.py --round r02_<what>`; first when Economics has
-   its 4,000 markets, then per category, then all categories together. Add a report section per round (data
-   seen, counts of pass / lead / loses, the tables that matter, what it means). Follow every lead with a round
-   that tests it where it was not found (other categories, the other half of the sample, tighter and looser
-   settings) before calling it anything.
-2. For rules that pass: run `research/portfolio.py` on them (stake 0.5%, 1%, 2% of equity; event cap 3%;
-   exposure cap 50%) and report return per year, drawdown and time in the market.
-3. Forward test (family 17): the paper loop runs by itself. At each check-in: `tail -20 data/run_cycle.log`,
-   export and commit the forecast log, and note in the report how many forecasts exist and what was traded.
-4. Families still to code: the NO side of ladder inversions; sums of mutually exclusive events (needs the
-   event's `mutually_exclusive` flag: download `/historical/events` or `/events/{ticker}`); hourly bars for the
-   last two days before close; sports and crypto samples (`--categories Sports` on the downloader, last).
-5. After the non-sports first pass finishes, the downloader continues on its own with a second pass (all
-   remaining markets of 200+ contracts) and then the recently settled markets. Leave it running.
+1. When the random Economics sample has about 1,500 markets with bars (`python3 research/panel.py` prints the
+   count; markets never quoted are attempted but carry no bars, so expect fewer bars than attempts), run
+   `python3 research/run_sweep.py --round r05_random_economics`. First question: do "taker YES at 65-90c loses"
+   and "taker NO against 5-20c longshots loses" survive? Write the answer as section 3.6 whichever way it goes.
+2. Then per category as each random sample lands, then all together. Leads get the year-by-year and
+   concentration table (report 3.4 shows the form) before another round is spent on them.
+3. For rules that pass on the random sample: `research/portfolio.py` (stake 0.5%, 1%, 2%; event cap 3%; exposure
+   cap 50%), report return per year, drawdown, time in the market.
+4. Forward test: `tail -20 data/run_cycle.log`, `python3 scripts/export_forecasts.py`, commit the CSV, one line
+   in the report on how many forecasts exist and what was traded.
+5. Families still to code: the NO side of ladder inversions; sums over mutually exclusive events (needs each
+   event's `mutually_exclusive` flag); hourly bars for the last two days; a volume-at-the-time filter family;
+   sports and crypto samples last.

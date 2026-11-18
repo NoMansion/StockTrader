@@ -37,13 +37,26 @@ def set_split(date: str) -> None:
     SPLIT_TS = int(pd.Timestamp(date, tz="UTC").timestamp())
 
 
-def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars: int = 2) -> pd.DataFrame:
+def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars: int = 2,
+         sample: str = "random", min_volume: float = 1.0) -> pd.DataFrame:
+    """sample="random" (the default) keeps, per category, only the markets drawn in the download's fixed shuffle:
+    those whose shuffle key is below the first key not yet attempted. sample="all" also keeps the markets that
+    were downloaded biggest-first before the shuffle existed; that set is selected on lifetime volume, which is
+    hindsight, and must not be used to judge a rule."""
     db = sqlite3.connect(str(db_path), timeout=60)
+    cols = {r[1] for r in db.execute("PRAGMA table_info(markets)")}
     where = "WHERE m.candles_done=1"
     args: list = []
     if categories:
         where += f" AND m.category IN ({','.join('?' * len(categories))})"
         args += categories
+    if sample == "random" and "rnd" in cols:
+        fr = dict(db.execute("SELECT category, MIN(rnd) FROM markets WHERE candles_done=0 AND volume>=? GROUP BY category",
+                             (min_volume,)).fetchall())
+        cats = [r[0] for r in db.execute("SELECT DISTINCT category FROM markets")]
+        parts = " OR ".join(f"(m.category = ? AND m.rnd < {int(fr.get(c, 2 ** 32))})" for c in cats)
+        where += f" AND ({parts})"
+        args += cats
     mk = pd.read_sql_query(
         f"""SELECT m.ticker, m.series, m.event, m.category, m.open_ts, m.close_ts, m.result, m.volume AS tot_vol,
                    m.strike_type, m.floor_strike, m.cap_strike, s.fee_type, s.fee_multiplier, s.frequency

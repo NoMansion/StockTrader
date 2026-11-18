@@ -4,23 +4,27 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-- **No strategy has passed.** Two rounds so far, both on Economics only (sections 3.1 and 3.2).
-- **The clearest finding is about what loses.** In Economics markets, paying the ask for the favourite (contracts
-  priced 50 cents and up) lost 9 to 14% per dollar before April 2026 and 18 to 24% after, and selling longshots
-  lost too. The "safe" plays the research literature recommends on other venues did not work here.
-- **The profitable-looking mirror (buying No) is a lead, not a result.** It rests on "above X" markets in 2025
-  and 2026, half of them weekly gas prices, and lost in 2023 and 2024.
-- **Data is still downloading.** Kalshi's public API throttles hard; the non-sports history will take most of a
-  night. Sweeps are rerun as each category lands.
-- **What can and cannot be tested this way.** Rules on prices, time, category and market structure can be
-  backtested and are being tested here. Claude's forecasts cannot: the model has read about the past, so any
-  backtest of it would be flattered by hindsight. That family is tested forward only, by the paper bot.
+- **No strategy has passed, and the results so far are under a cloud of my own making.** Rounds 3.1 to 3.5 used
+  markets downloaded biggest-first. "Biggest" means lifetime volume, which is only known afterwards and is larger
+  for markets where something surprising happened. That can manufacture exactly the pattern those rounds found
+  (favourites losing, longshots paying). Section 3.5 explains; the download now draws markets at random and the
+  backtests use only the random sample. Treat 3.2 to 3.5 as provisional until the random sample confirms or
+  overturns them.
+- **Provisional pattern, same in Economics and Politics:** paying the ask for the high-priced side lost on both
+  sides of the sample split, and the low-priced side looked cheap. If it survives random sampling it is the main
+  finding; if it does not, it was the sampling.
+- **Forward test of Claude's forecasts has begun** on Kalshi, paper only: 4 forecasts, 1 resting paper order
+  (`reports/forward_log.csv`).
+- **Data is still downloading.** Kalshi's public API throttles hard, and this session's machine sleeps when
+  idle, which cost about an hour and a half before I found it (section 3.5).
 
 ## 1. Method
 
 **Data.** Settled Kalshi markets from the exchange's public archive (2021 to September 2026) plus markets settled
-since, with daily bars of bid, ask and traded price. Markets with fewer than 200 contracts traded get no bars.
-The download takes the biggest markets of each category first, so early rounds see large markets only.
+since, with daily bars of bid, ask and traded price. Since 20:53 UTC on 2026-11-18 the download draws markets in a fixed random order within each category and
+takes any market that ever traded; backtests use only that random sample. (Before that it took the biggest
+markets first, with a 200-contract minimum: see section 3.5 for why that was a mistake.) Liquidity conditions in
+a rule must use volume as it stood at the time of the bar, never lifetime volume.
 
 **One observation per market per day.** A rule may look only at what was known at the end of a daily bar: the
 quote, the days left, the market's age, recent volume and price changes, and the other markets of the same event.
@@ -176,3 +180,42 @@ followed further.
 Operational note: this session's worker restarted around 19:10 UTC and killed both background jobs; the download
 gained only 160 Politics markets in the hour. Both are restarted, a watchdog check-in now restarts them every
 half hour, and the paper loop keeps its schedule in the ledger so a restart does not reset its clock.
+
+### 3.5 Round r04, Politics added, and a flaw in the sample (21:00 UTC)
+
+**Data.** Politics: 1,836 markets in 711 events. Combined with Economics: 5,080 markets, 1,565 events, 391,669
+daily bars, 1,775 markets out of sample. 2,190 rules.
+
+**What the round shows.** 1 pass, 49 leads, 50 reliably lose. Politics repeats the Economics pattern:
+
+| Rule (taker unless noted), Economics + Politics | In sample | t | Out of sample | t | Events in / out |
+|---|---|---|---|---|---|
+| YES at 65 to 80c | −10.5% | −4.2 | −19.3% | −4.7 | 654 / 246 |
+| YES at 80 to 90c | −7.6% | −4.1 | −15.4% | −4.6 | 569 / 215 |
+| NO against a 5 to 10c longshot | −4.9% | −4.0 | −6.5% | −4.8 | 713 / 293 |
+| YES at 0 to 5c, 14 to 30 days out | −65% | −6.6 | −81% | −7.6 | 414 / 166 |
+| NO at 65 to 80c, resting order (the mirror of the first row) | +8.9% | 1.3 | +39.9% | 3.4 | 619 / 239 |
+| NO against a 0 to 5c longshot, 14 to 30 days out, resting order (the one "pass") | +2.1% | 3.2 | +2.8% | 4.9 | 342 / 150 |
+
+Read at face value: prices are too extreme between about 5 and 95 cents (the dear side loses), and the very
+cheapest contracts, under 5 cents, are overpriced.
+
+**Why I do not read it at face value.** Every market in these rounds was among the biggest of its category by
+lifetime volume: the median market here traded 66,858 contracts. Lifetime volume is hindsight. A 10-cent
+contract that goes on to win trades heavily on its way to a dollar; a 90-cent favourite that collapses does the
+same. Choosing the biggest markets therefore over-samples surprises, and surprises are exactly "the dear side
+lost". I checked whether the effect grows with volume inside this sample and it does not clearly (favourites:
+−10%, −13%, −20%, −15% from the smaller half to the top 5%), but that proves little, because the whole sample is
+the top of the distribution.
+
+**What changed.** The download now takes markets in a fixed random order within each category, with no volume
+minimum beyond "ever traded", and `research/panel.py` uses only the markets drawn that way. The 5,840 markets
+already downloaded biggest-first stay in the database but are excluded by default. A test covers it. The random
+Economics sample is downloading now; Politics follows.
+
+**What stays.** The engine, the families, and the rule that any lead gets a year-by-year table. The forward test
+of Claude's forecasts is unaffected.
+
+**Also found:** this session's machine is put to sleep about two minutes after a turn ends unless a task tracked
+by the session is still running. Detached jobs alone do not keep it awake. That is why the download stalled twice.
+Each check-in now leaves a tracked keep-awake task running beside the download.

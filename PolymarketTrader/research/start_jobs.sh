@@ -3,7 +3,7 @@
 cd "$(dirname "$0")/.." || exit 1
 mkdir -p data
 if ! pgrep -f "research/kalshi_download.py" > /dev/null; then
-    setsid nohup python3 -u research/kalshi_download.py --interval 0.4 --min-volume 200 --first-pass 2500 >> data/kalshi_download.log 2>&1 < /dev/null &
+    setsid nohup python3 -u research/kalshi_download.py --interval 0.4 --first-pass 2500 >> data/kalshi_download.log 2>&1 < /dev/null &
     echo "started: history download"
 else
     echo "running: history download"

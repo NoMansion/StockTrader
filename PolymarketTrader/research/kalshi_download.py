@@ -4,8 +4,10 @@ Public endpoints only, paced, resumable: stop it at any point and run it again. 
 
   series   every series (a recurring question such as "CPI year-over-year") in the chosen categories
   markets  every settled market of those series in the archive (/historical/markets, back to 2022)
-  candles  daily bid / ask / trade bars for each market from open to close, biggest markets first within each
-           category so that a partial download is already a balanced sample
+  candles  daily bid / ask / trade bars for each market from open to close, in a RANDOM order within each
+           category (a fixed shuffle: the checksum of the ticker). Random on purpose: taking the biggest markets
+           first, as the first version did, selects on lifetime volume, which is only known afterwards and is
+           larger for markets where something surprising happened. Backtests use only the random sample.
   recent   markets settled since the archive cutoff (/markets?status=settled) and their bars; last and slowest,
            because that endpoint throttles hard
 
@@ -18,6 +20,7 @@ import argparse
 import sqlite3
 import sys
 import time
+import zlib
 from datetime import datetime
 from pathlib import Path
 
@@ -35,7 +38,7 @@ CREATE TABLE IF NOT EXISTS series (ticker TEXT PRIMARY KEY, category TEXT, title
     frequency TEXT, tags TEXT, markets_done INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS markets (ticker TEXT PRIMARY KEY, series TEXT, event TEXT, category TEXT, title TEXT, sub TEXT,
     open_ts INTEGER, close_ts INTEGER, result TEXT, settle REAL, volume REAL, open_interest REAL, last_price REAL,
-    strike_type TEXT, floor_strike REAL, cap_strike REAL, src TEXT, candles_done INTEGER DEFAULT 0);
+    strike_type TEXT, floor_strike REAL, cap_strike REAL, src TEXT, candles_done INTEGER DEFAULT 0, rnd INTEGER);
 CREATE INDEX IF NOT EXISTS markets_series ON markets (series);
 CREATE INDEX IF NOT EXISTS markets_todo ON markets (candles_done, category, volume);
 CREATE TABLE IF NOT EXISTS candles (ticker TEXT, ts INTEGER, bid REAL, ask REAL, bid_hi REAL, bid_lo REAL, ask_hi REAL,
@@ -81,12 +84,24 @@ def phase_series(db, k, categories):
         log(f"series: {cat}: {len(rows)}")
 
 
+def shuffle_key(ticker: str) -> int:
+    """A fixed pseudo-random number per market: its position in the download order and in the sample."""
+    return zlib.crc32(ticker.encode("utf-8"))
+
+
+def frontier(db, category: str, min_volume: float) -> int:
+    """Markets of the category with a shuffle key below this number have all been attempted: they ARE the random
+    sample. (2**32 when the whole category is done.)"""
+    row = db.execute("SELECT MIN(rnd) FROM markets WHERE category=? AND candles_done=0 AND volume>=?", (category, min_volume)).fetchone()
+    return int(row[0]) if row and row[0] is not None else 2 ** 32
+
+
 def market_row(m, series, category, src):
     return (m["ticker"], series, m.get("event_ticker"), category, m.get("title"), first(m, "yes_sub_title", "subtitle"),
             ts(m.get("open_time")), ts(m.get("close_time")), m.get("result"),
             num(first(m, "settlement_value_dollars", "settlement_value")), num(first(m, "volume_fp", "volume")),
             num(first(m, "open_interest_fp", "open_interest")), num(first(m, "last_price_dollars", "last_price")),
-            m.get("strike_type"), num(m.get("floor_strike")), num(m.get("cap_strike")), src)
+            m.get("strike_type"), num(m.get("floor_strike")), num(m.get("cap_strike")), src, shuffle_key(m["ticker"]))
 
 
 def phase_markets(db, k, categories, max_per_series, which):
@@ -119,8 +134,8 @@ def phase_markets(db, k, categories, max_per_series, which):
                     return
                 time.sleep(60)
         db.executemany("INSERT OR IGNORE INTO markets (ticker, series, event, category, title, sub, open_ts, close_ts, result, "
-                       "settle, volume, open_interest, last_price, strike_type, floor_strike, cap_strike, src) "
-                       "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", batch)
+                       "settle, volume, open_interest, last_price, strike_type, floor_strike, cap_strike, src, rnd) "
+                       "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", batch)
         if ok:
             failures = 0
             db.execute("UPDATE series SET markets_done = markets_done | ? WHERE ticker=?", (bit, series))
@@ -152,7 +167,7 @@ def phase_candles(db, k, categories, min_volume, max_markets, max_days):
     while cats and done < max_markets:
         for cat in list(cats):                      # round-robin across categories, biggest markets first
             rows = db.execute("SELECT ticker, series, open_ts, close_ts, src FROM markets WHERE category=? AND candles_done=0 "
-                              "AND volume>=? ORDER BY volume DESC LIMIT 40", (cat, min_volume)).fetchall()
+                              "AND volume>=? ORDER BY rnd LIMIT 40", (cat, min_volume)).fetchall()
             if not rows:
                 cats.remove(cat)
                 continue
@@ -192,7 +207,8 @@ def main():
     ap.add_argument("--db", default=str(ROOT / "data" / "kalshi_hist.db"))
     ap.add_argument("--phase", default="all", choices=["all", "series", "markets", "recent", "candles"])
     ap.add_argument("--categories", default=",".join(c for c in CATEGORIES if c != "Sports"))
-    ap.add_argument("--min-volume", type=float, default=200.0, help="contracts traded: smaller markets get no bars")
+    ap.add_argument("--min-volume", type=float, default=1.0,
+                    help="lifetime contracts traded; keep it at 1 (any trade at all): a higher bar selects on hindsight")
     ap.add_argument("--max-markets", type=int, default=10 ** 9)
     ap.add_argument("--first-pass", type=int, default=4000, help="markets per category to get bars for in the first pass")
     ap.add_argument("--max-per-series", type=int, default=200000)
@@ -203,6 +219,13 @@ def main():
     Path(args.db).parent.mkdir(parents=True, exist_ok=True)
     db = sqlite3.connect(args.db, timeout=60)
     db.executescript(SCHEMA)
+    if "rnd" not in {r[1] for r in db.execute("PRAGMA table_info(markets)")}:      # databases from before the shuffle
+        db.execute("ALTER TABLE markets ADD COLUMN rnd INTEGER")
+    todo = db.execute("SELECT ticker FROM markets WHERE rnd IS NULL").fetchall()
+    if todo:
+        db.executemany("UPDATE markets SET rnd=? WHERE ticker=?", [(shuffle_key(t[0]), t[0]) for t in todo])
+        db.commit()
+    db.execute("CREATE INDEX IF NOT EXISTS markets_rnd ON markets (category, candles_done, rnd)")
     db.execute("PRAGMA journal_mode=WAL")
     k = KalshiHTTP(min_interval=args.interval)
     if args.phase in ("all", "series"):
@@ -212,7 +235,8 @@ def main():
         # start on the first categories while the later ones are still downloading.
         for cat in cats:
             phase_markets(db, k, [cat], args.max_per_series, "hist")
-            have = db.execute("SELECT COUNT(*) FROM markets WHERE category=? AND candles_done>0", (cat,)).fetchone()[0]
+            have = db.execute("SELECT COUNT(*) FROM markets WHERE category=? AND volume>=? AND rnd<?",
+                              (cat, args.min_volume, frontier(db, cat, args.min_volume))).fetchone()[0]
             if have < args.first_pass:              # a restart does not repeat a category's first pass
                 phase_candles(db, k, [cat], args.min_volume, args.first_pass - have, args.max_days)
     if args.phase in ("all", "markets"):                # also picks up any series a throttled pass left behind
