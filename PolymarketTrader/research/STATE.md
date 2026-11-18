@@ -144,6 +144,12 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   Download: Economics census down to 5,000 contracts in progress, then Politics random pass and census, then
   Companies onward.
 
+- 4:53 pm CST (check-in 6): nothing new had landed since 4:40 pm. Calibration curve added (report 3.10). Volume
+  gradient seen in family 23 (NO against YES at 0-5c, taker, in / out of sample): under 1,000 contracts so far
+  +0.2% / -3.2%; 1,000-10,000: -0.4% / -0.6%; 10,000-100,000: +0.5% / +0.8% (random sample, thin). So the edge
+  starts somewhere above 10,000 contracts: test it properly when the Economics census reaches 5,000
+  (`--sample liquid` with no `--min-cumvol`), and write the answer into the report.
+
 ## How to run a round
 
 ```
