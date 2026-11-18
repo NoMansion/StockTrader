@@ -27,6 +27,13 @@ TAKER, MAKER = 0.07, 0.0175
 SPLIT_TS = int(pd.Timestamp("2025-07-01", tz="UTC").timestamp())      # in-sample before, out-of-sample after
 
 
+def set_split(date: str) -> None:
+    """Move the in-sample / out-of-sample boundary. Choose it from the calendar and the number of events on each
+    side only, never from results, and write the choice down before running a sweep."""
+    global SPLIT_TS
+    SPLIT_TS = int(pd.Timestamp(date, tz="UTC").timestamp())
+
+
 def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars: int = 2) -> pd.DataFrame:
     db = sqlite3.connect(str(db_path), timeout=60)
     where = "WHERE m.candles_done=1"
@@ -106,8 +113,32 @@ def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars
     c = (1 - df["ask"]) + mrate * df["mult"] * df["ask"] * (1 - df["ask"])
     df["r_no_mk"] = np.where(df["f3_no"], ((1 - y) - c) / c, np.nan).astype("float32")
     df["oos"] = df["close_ts"] >= SPLIT_TS
-    df = df[df["nbars"] >= min_bars]
-    return df.reset_index(drop=True)
+    df = df[df["nbars"] >= min_bars].reset_index(drop=True)
+    return ladder(df)
+
+
+def ladder(df: pd.DataFrame) -> pd.DataFrame:
+    """Threshold ladders: markets of one event that ask "above X?" for a rising X. The next rung up can never be
+    MORE likely than this one. For each row, the quotes of the next rung up at the same bar, and the return of the
+    pair trade that locks the ordering in (buy YES here, buy NO one rung up; it pays at least 1 whatever happens)."""
+    for col in ("up_bid", "up_ask", "up_mid", "r_pair_tk", "pair_cost"):
+        df[col] = np.float32(np.nan)
+    lad = df[(df["strike_type"] == "greater") & df["floor_strike"].notna()].sort_values(["event", "ts", "floor_strike"])
+    if lad.empty:
+        return df
+    g = lad.groupby(["event", "ts"], sort=False)
+    up = pd.DataFrame({"up_bid": g["bid"].shift(-1), "up_ask": g["ask"].shift(-1), "up_mid": g["mid"].shift(-1),
+                       "up_n_bid": g["n_bid_op"].shift(-1), "up_n_ok": g["n_ok"].shift(-1), "up_y": g["y"].shift(-1),
+                       "up_quoted": g["quoted"].shift(-1)}, index=lad.index)
+    ok = lad["n_ok"] & (up["up_n_ok"] == True) & (up["up_quoted"] == True)        # noqa: E712
+    fee = TAKER * lad["mult"] * (lad["n_ask_op"] * (1 - lad["n_ask_op"]) + up["up_n_bid"] * (1 - up["up_n_bid"]))
+    cost = lad["n_ask_op"] + (1 - up["up_n_bid"]) + fee
+    pay = lad["y"] + (1 - up["up_y"])
+    df.loc[lad.index, "up_bid"], df.loc[lad.index, "up_ask"] = up["up_bid"].astype("float32"), up["up_ask"].astype("float32")
+    df.loc[lad.index, "up_mid"] = up["up_mid"].astype("float32")
+    df.loc[lad.index, "pair_cost"] = np.where(ok, cost, np.nan).astype("float32")
+    df.loc[lad.index, "r_pair_tk"] = np.where(ok, (pay - cost) / cost, np.nan).astype("float32")
+    return df
 
 
 def describe(df: pd.DataFrame) -> str:

@@ -25,7 +25,9 @@ class KalshiHTTP:
             import httpx                                    # arrives with the polymarket-us SDK
             client = httpx.Client(timeout=timeout, headers={"User-Agent": user_agent})
         self.client = client
+        self.floor = float(min_interval)            # the pace asked for; throttling slows down from here
         self._last = 0.0
+        self._streak = 0                            # successes since the last refusal
         self.requests = 0
         self.rate_limited = 0
 
@@ -52,11 +54,16 @@ class KalshiHTTP:
                 pause *= 3
                 continue
             if r.status_code == 200:
+                self._streak += 1
+                if self._streak >= 40 and self.min_interval > self.floor:     # earn the speed back, slowly
+                    self.min_interval = max(self.floor, self.min_interval * 0.9)
+                    self._streak = 0
                 return r.json()
             if r.status_code == 429 or r.status_code >= 500:
                 if r.status_code == 429:
                     self.rate_limited += 1
-                    self.min_interval = min(self.min_interval * 1.5 + 0.05, 2.0)   # slow down for good
+                    self._streak = 0
+                    self.min_interval = min(self.min_interval * 1.5 + 0.05, 3.0)   # slow down; successes earn it back
                 retry_after = r.headers.get("Retry-After")
                 try:
                     wait = float(retry_after) if retry_after else pause

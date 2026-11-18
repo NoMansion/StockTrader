@@ -35,7 +35,7 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 
 | Job | Command (from `PolymarketTrader/`) | Log |
 |---|---|---|
-| Kalshi history download | `setsid nohup python3 -u research/kalshi_download.py --interval 0.3 --min-volume 200 > data/kalshi_download.log 2>&1 < /dev/null &` | `data/kalshi_download.log` |
+| Kalshi history download | `setsid nohup python3 -u research/kalshi_download.py --interval 0.4 --min-volume 200 >> data/kalshi_download.log 2>&1 < /dev/null &` | `data/kalshi_download.log` |
 
 Check with `pgrep -af kalshi_download` and `tail -3 data/kalshi_download.log`. It is resumable: if it died, run
 the same command again. If `data/` is gone (new container), run it again from scratch; listing takes about 1.5
@@ -46,7 +46,25 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
 
 ## Progress
 
-- 2026-11-18 16:59 UTC: download started (12,278 series in 14 non-sports categories).
+- 2026-11-18 16:59 UTC: download started; restarted 17:08 in priority order (Economics, Politics, Companies,
+  Commodities, Science and Technology, Elections, Health, World, Financials, Mentions, Entertainment, Crypto,
+  Social, Climate and Weather). Each category: list its settled markets, then daily bars for its 6,000 biggest.
+- 17:10: Kalshi adapter (`src/kalshi.py`) built, tested offline against real payloads, made the default venue.
+  NOT yet run live end to end: do `python scripts/run_cycle.py --scan` first (pause the download while it runs,
+  the two share Kalshi's rate limit: `pkill -STOP -f kalshi_download`, then `pkill -CONT -f kalshi_download`).
+- 17:12: backtest engine committed (`research/panel.py`, `backtest.py`, `families.py`, `run_sweep.py`). Checked
+  on a made-up exchange: with fair prices no taker rule passes; a planted bias is found on the right side.
+
+## How to run a round
+
+```
+cd PolymarketTrader
+python3 research/panel.py                               # what has been downloaded so far
+python3 research/run_sweep.py --round r01               # every rule of every family -> research/results/r01.csv
+```
+
+A round takes a few minutes. Name rounds r01, r02, ... and say in the report which data each one saw (the
+panel's first line: markets, events, dates), because the download keeps growing.
 
 ## Backlog of strategy families (mechanical, backtestable)
 
@@ -80,7 +98,10 @@ Forward-only (cannot be backtested):
 
 ## Next actions
 
-1. Finish `src/kalshi.py` (venue adapter with the same interface as `src/venue.py`), tests from real payloads,
-   switch `account.venue` to kalshi, one live paper cycle.
-2. Write `research/backtest.py` (panel builder from the database, cost model, clustered statistics, time split).
-3. Run family 1 as soon as about 5,000 markets have bars; then work down the backlog.
+1. Round r01 on Economics as soon as its bars are in (check `sqlite3 data/kalshi_hist.db "select category,
+   sum(candles_done=1) from markets group by 1"`); rerun as each category lands. Write the first report section.
+2. Live Kalshi scan and one paper cycle (see Progress, 17:10), fix whatever the live data shows, commit.
+3. Second-round families not yet coded: ladder consistency (6), series persistence (11), combinations (14),
+   portfolio rules (15). Then sports and crypto samples (16).
+4. Start the forward test of Claude forecasts on Kalshi (17): one paper cycle every few hours with reduced
+   settings (2 runs, medium effort, 4 markets), ledger at `data/pmt.db`; export the forecast log to the report.

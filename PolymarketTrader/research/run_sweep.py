@@ -20,7 +20,7 @@ sys.path.insert(0, str(HERE))
 
 import panel  # noqa: E402
 from backtest import Panel, row, verdict  # noqa: E402
-from families import Features, all_rules  # noqa: E402
+from families import Features, all_rules, persistence  # noqa: E402
 
 
 def titles_for(df: pd.DataFrame, db_path) -> np.ndarray:
@@ -36,9 +36,12 @@ def main() -> int:
     ap.add_argument("--db", default=str(panel.DB))
     ap.add_argument("--categories", default="")
     ap.add_argument("--min-events", type=int, default=100)
+    ap.add_argument("--split", default="", help="in/out-of-sample boundary, e.g. 2026-04-01 (default 2025-07-01)")
     args = ap.parse_args()
     cats = [c.strip() for c in args.categories.split(",") if c.strip()] or None
     t0 = time.time()
+    if args.split:
+        panel.set_split(args.split)
     df = panel.load(args.db, cats)
     print(panel.describe(df))
     if df.empty:
@@ -46,11 +49,25 @@ def main() -> int:
     p = Panel(df)
     f = Features(p)
     rows = []
+    pair_r = df["r_pair_tk"].to_numpy("float32")
+    pair_px = df["pair_cost"].to_numpy("float32")
+    pair_pay = (pair_r > 0).astype("float32")
     for family, name, mask, side, entry in all_rules(f, titles_for(df, args.db)):
-        ins, oos = p.evaluate(mask, side, entry)
-        extra = {"fill": p.fill_rate(mask, side)} if entry == "mk" else {"fill": 1.0}
+        if entry == "pair":
+            ins, oos = p.evaluate_custom(mask, pair_r, pair_px, pair_pay)
+            extra = {"fill": 1.0}
+        else:
+            ins, oos = p.evaluate(mask, side, entry)
+            extra = {"fill": p.fill_rate(mask, side)} if entry == "mk" else {"fill": 1.0}
         r = row(family, name, side, entry, ins, oos, **extra)
         r["verdict"] = verdict(r, args.min_events)
+        rows.append(r)
+    for family, name, mask, side, entry, n_series in persistence(f):
+        ins, oos = p.evaluate(mask, side, entry)
+        r = row(family, f"{name} ({n_series} series)", side, entry, ins, oos, fill=float("nan"))
+        # selected on the in-sample half, so only the out-of-sample half counts
+        r["verdict"] = ("thin" if oos.events < args.min_events else "pass" if oos.ret > 0 and oos.t >= 3 else
+                        "lead" if oos.ret > 0 and oos.t >= 2 else "no")
         rows.append(r)
     out = pd.DataFrame(rows)
     (HERE / "results").mkdir(exist_ok=True)

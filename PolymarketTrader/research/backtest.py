@@ -88,6 +88,14 @@ class Panel:
         o = self.oos[rows]
         return (self.sample(rows[~o], self.r[key], self.px[key], pay), self.sample(rows[o], self.r[key], self.px[key], pay))
 
+    def evaluate_custom(self, mask: np.ndarray, r: np.ndarray, px: np.ndarray, pay: np.ndarray,
+                        once: bool = True) -> tuple[Sample, Sample]:
+        """As evaluate(), for a return column that is not one of the four standard ones (pair trades and the like)."""
+        m = mask & ~np.isnan(r)
+        rows = self.first_per_market(m) if once else np.flatnonzero(m)
+        o = self.oos[rows]
+        return self.sample(rows[~o], r, px, pay), self.sample(rows[o], r, px, pay)
+
     def fill_rate(self, mask: np.ndarray, side: str) -> float:
         """Of the markets where a resting order was placed (first bar the condition held), the share that filled."""
         placed = self.first_per_market(mask & self.df["quoted"].to_numpy(bool))

@@ -144,6 +144,45 @@ def f_calendar(f: Features):
         yield "12 calendar", f"month {mth}, mid 20-80c", f.base & (f.month == mth) & f.price(0.2, 0.8), side, "tk"
 
 
+# 6. Threshold ladders: "above X" for rising X inside one event must be priced in order
+def f_ladder(f: Features):
+    d = f.p.df
+    pair_cost = np.nan_to_num(d["pair_cost"].to_numpy("float32"), nan=9.0)
+    up_mid = np.nan_to_num(d["up_mid"].to_numpy("float32"), nan=-9.0)
+    live = f.q & (f.dte > 0.25)
+    for x in (0.0, 0.01, 0.02, 0.05):
+        # buy YES on this rung and NO on the next rung up for less than the 1 it must pay: a lock, if it fills
+        yield "6 ladder", f"pair costs under {1 - x:.2f} after fees", live & (pair_cost < 1 - x), "pair", "pair"
+    for eps in (0.0, 0.02, 0.05):
+        inv = live & (up_mid >= f.mid + eps) & (f.mid > 0)
+        for entry in ENTRIES:
+            yield "6 ladder", f"next rung up priced {eps * 100:g}c or more ABOVE this one: buy this rung", inv, "yes", entry
+
+
+# 14. Combinations of the single-factor conditions
+def f_combos(f: Features):
+    price = [(0.03, 0.10), (0.10, 0.25), (0.25, 0.50), (0.50, 0.75), (0.75, 0.90), (0.90, 0.97)]
+    days = [(0, 2), (2, 7), (7, 30), (30, 10000)]
+    vols = [(0, 500), (500, 1e12)]
+    for (lo, hi), (d0, d1), cat, side, entry in itertools.product(price, days, f.cats, SIDES, ENTRIES):
+        yield ("14 price x days x category", f"{cat}: mid {name_range(lo * 100, hi * 100, 'c')}, {name_range(d0, d1, 'd')} to close",
+               f.base & (f.cat == cat) & f.price(lo, hi) & f.days(d0, d1), side, entry)
+    for (lo, hi), (d0, d1), (v0, v1), side, entry in itertools.product(price, days, vols, SIDES, ENTRIES):
+        tag = "thin" if v1 < 1e11 else "busy"
+        yield ("14 price x days x volume", f"{tag} (7d ${v0:g}{'-' + format(v1, 'g') if v1 < 1e11 else '+'}): mid "
+               f"{name_range(lo * 100, hi * 100, 'c')}, {name_range(d0, d1, 'd')} to close",
+               f.base & (f.dvol7 >= v0) & (f.dvol7 < v1) & f.price(lo, hi) & f.days(d0, d1), side, entry)
+    for (lo, hi), (d0, d1), fav, side, entry in itertools.product(price, days, (True, False), SIDES, ENTRIES):
+        multi = f.ev_total >= 3
+        yield ("14 price x days x favourite", f"{'favourite' if fav else 'not favourite'} of a 3+ market event: mid "
+               f"{name_range(lo * 100, hi * 100, 'c')}, {name_range(d0, d1, 'd')} to close",
+               f.base & multi & (f.fav == fav) & f.price(lo, hi) & f.days(d0, d1), side, entry)
+    for (lo, hi), k, sign, side, entry in itertools.product(price, (1, 3, 7), (1, -1), SIDES, ENTRIES):
+        mom = f.mom[k]
+        m = f.base & f.price(lo, hi) & ((mom >= 0.03) if sign > 0 else (mom <= -0.03))
+        yield ("14 price x momentum", f"mid {name_range(lo * 100, hi * 100, 'c')}, {'up' if sign > 0 else 'down'} 3c+ in {k}d", m, side, entry)
+
+
 def all_rules(f: Features, titles: np.ndarray):
     yield from f_calibration(f)
     yield from f_bonds(f)
@@ -153,3 +192,45 @@ def all_rules(f: Features, titles: np.ndarray):
     yield from f_attention(f)
     yield from f_spread(f)
     yield from f_calendar(f)
+    yield from f_ladder(f)
+    yield from f_combos(f)
+
+
+# 11. Persistence: is a series that paid one side in the first half still paying it in the second?
+PERSIST_BASES = [("NO at mid 20-80c", 0.20, 0.80, "no"), ("YES at mid 20-80c", 0.20, 0.80, "yes"),
+                 ("NO at mid 3-20c", 0.03, 0.20, "no"), ("YES at mid 80-97c", 0.80, 0.97, "yes"),
+                 ("NO at mid 80-97c", 0.80, 0.97, "no"), ("YES at mid 3-20c", 0.03, 0.20, "yes")]
+
+
+def persistence(f: Features, min_events: int = 15, t_select: float = 2.0):
+    """For each base rule and entry: pick the series whose in-sample result was positive with t >= t_select, then
+    report the POOLED result of those series. The in-sample half is selected-on and means nothing; the
+    out-of-sample half is the test. Yields (family, name, mask, side, entry, n_series_selected)."""
+    p = f.p
+    series = p.df["series"].to_numpy(object)
+    codes, names = np.unique(series, return_inverse=True)[::-1]
+    for (label, lo, hi, side), entry in itertools.product(PERSIST_BASES, ENTRIES):
+        base = f.base & f.price(lo, hi) & p.ok[(side, entry)]
+        rows = p.first_per_market(base)
+        rows_is = rows[~p.oos[rows]]
+        if rows_is.size == 0:
+            continue
+        r = p.r[(side, entry)][rows_is].astype("float64")
+        sc = codes[rows_is]
+        chosen = []
+        for c in np.unique(sc):
+            sel = sc == c
+            x = r[sel]
+            ev = p.event[rows_is][sel]
+            k = np.unique(ev).size
+            if k < min_events:
+                continue
+            m = x.mean()
+            sums = np.bincount(np.unique(ev, return_inverse=True)[1], weights=x - m)
+            se = np.sqrt((sums ** 2).sum()) / x.size
+            if se > 0 and m > 0 and m / se >= t_select:
+                chosen.append(c)
+        if not chosen:
+            continue
+        mask = base & np.isin(codes, chosen)
+        yield "11 persistence", f"series that paid in sample: {label}", mask, side, entry, len(chosen)

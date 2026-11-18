@@ -128,7 +128,7 @@ def phase_markets(db, k, categories, max_per_series, which):
         if i % 200 == 0:
             total = db.execute("SELECT COUNT(*) FROM markets").fetchone()[0]
             log(f"markets[{which}]: {i}/{len(todo)} series, {total} markets so far ({cat} {series}: {len(batch)}); "
-                f"{k.requests} requests, {k.rate_limited} rate limits")
+                f"{k.requests} requests, {k.rate_limited} rate limits, interval {k.min_interval:.2f}s")
 
 
 def candle_rows(ticker, cs):
@@ -194,7 +194,7 @@ def main():
     ap.add_argument("--categories", default=",".join(c for c in CATEGORIES if c != "Sports"))
     ap.add_argument("--min-volume", type=float, default=200.0, help="contracts traded: smaller markets get no bars")
     ap.add_argument("--max-markets", type=int, default=10 ** 9)
-    ap.add_argument("--first-pass", type=int, default=6000, help="markets per category to get bars for in the first pass")
+    ap.add_argument("--first-pass", type=int, default=4000, help="markets per category to get bars for in the first pass")
     ap.add_argument("--max-per-series", type=int, default=200000)
     ap.add_argument("--max-days", type=int, default=400)
     ap.add_argument("--interval", type=float, default=0.2, help="seconds between requests")
@@ -213,7 +213,7 @@ def main():
         for cat in cats:
             phase_markets(db, k, [cat], args.max_per_series, "hist")
             phase_candles(db, k, [cat], args.min_volume, args.first_pass, args.max_days)
-    if args.phase == "markets":
+    if args.phase in ("all", "markets"):                # also picks up any series a throttled pass left behind
         phase_markets(db, k, cats, args.max_per_series, "hist")
     if args.phase in ("all", "candles"):
         phase_candles(db, k, cats, args.min_volume, args.max_markets, args.max_days)
