@@ -8,6 +8,9 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 
 ## Decisions already made
 
+- **Times for the user: US Central, 12-hour with am/pm** (asked 2026-11-18, 4:34 pm CST). Applies to every
+  message and to new report text; logs stay in UTC. `TZ=America/Chicago date "+%-I:%M %p %Z"`.
+
 - **Venue: Kalshi.** Measured live on 2026-11-18 with the same filters: 570 markets in 273 events pass on Kalshi
   against 96 on Polymarket US; 86 against 6 or 7 are deep enough to trade. Kalshi's taker fee is lower (0.07
   against 0.095) and it is open in every state. The user lives in Illinois and said to use whichever is better.
