@@ -192,7 +192,7 @@ class ClaudeCodeBackend:
 
     name = "claude_code"
 
-    def __init__(self, model: str = "opus", runs: int = 3, effort: str = "high", timeout_s: int = 900,
+    def __init__(self, model: str | None = "opus", runs: int = 3, effort: str = "high", timeout_s: int = 900,
                  max_budget_usd: float | None = None, cwd: str | Path | None = None, executable: str | None = None,
                  max_run_spread: float = 0.15):
         self.model, self.runs, self.effort, self.timeout_s = model, int(runs), effort, int(timeout_s)
@@ -200,6 +200,7 @@ class ClaudeCodeBackend:
         self.max_budget_usd = max_budget_usd
         self.cwd = str(cwd) if cwd else None
         self.executable = executable or shutil.which("claude") or "claude"
+        self.served: set[str] = set()               # models that actually answered (a busy model can fall back)
 
     def command(self) -> list[str]:
         """The system prompt goes through a file and the schema is sent without its descriptions, so no argument
@@ -209,9 +210,11 @@ class ClaudeCodeBackend:
         sysfile = work / "forecaster_system_prompt.txt"
         sysfile.write_text(SYSTEM + "\n\n" + field_guide(), encoding="utf-8")
         cmd = [self.executable, "-p", "--output-format", "json", "--json-schema", json.dumps(compact_schema(), separators=(",", ":")),
-               "--system-prompt-file", str(sysfile), "--model", self.model, "--effort", self.effort,
+               "--system-prompt-file", str(sysfile), "--effort", self.effort,
                "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch",
                "--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence"]
+        if self.model:                              # None = whatever model Claude Code is set to use on this PC
+            cmd += ["--model", self.model]
         if self.max_budget_usd:
             cmd += ["--max-budget-usd", str(self.max_budget_usd)]
         return cmd
@@ -227,6 +230,8 @@ class ClaudeCodeBackend:
         except (json.JSONDecodeError, TypeError):
             return None, 0.0
         cost = float(out.get("total_cost_usd") or 0.0)
+        if isinstance(out.get("modelUsage"), dict):
+            self.served.update(str(k) for k in out["modelUsage"])
         if out.get("is_error"):
             return None, cost
         ans = out.get("structured_output")
@@ -240,12 +245,14 @@ class ClaudeCodeBackend:
     def forecast(self, m: Market, now: float | None = None) -> Forecast | None:
         prompt = build_prompt(m, now)
         answers, cost = [], 0.0
+        self.served = set()
         for _ in range(self.runs):                  # one at a time: never more than one Claude process
             ans, c = self._one(prompt)
             cost += c
             if ans is not None:
                 answers.append(ans)
-        return aggregate(m.market_id, answers, self.name, self.model, cost, max_run_spread=self.max_run_spread, now=now)
+        model = ",".join(sorted(self.served)) or self.model or "default"
+        return aggregate(m.market_id, answers, self.name, model, cost, max_run_spread=self.max_run_spread, now=now)
 
 
 class ApiBackend:

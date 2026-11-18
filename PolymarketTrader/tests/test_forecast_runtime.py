@@ -118,10 +118,14 @@ def test_claude_code_backend_parses_structured_output(tmp_path):
             "assert '--tools' in args and args[args.index('--tools') + 1] == 'WebSearch,WebFetch'\n"
             "assert '--no-session-persistence' in args and '--strict-mcp-config' in args\n"
             "assert 'Today is' in prompt\n"
-            "print(json.dumps({'is_error': False, 'total_cost_usd': 0.1, 'structured_output': ans, 'result': ''}))\n")
+            "print(json.dumps({'is_error': False, 'total_cost_usd': 0.1, 'structured_output': ans, 'result': '',\n"
+            "                  'modelUsage': {'claude-test-1': {}}}))\n")
     be = fc.ClaudeCodeBackend(runs=3, cwd=tmp_path / "cwd", executable=fake_claude(tmp_path, body), timeout_s=60)
     f = be.forecast(market(), NOW)
     assert f.p_yes == 0.64 and f.p_runs == [0.64] * 3 and f.cost_usd == pytest.approx(0.3)
+    assert f.model == "claude-test-1"                             # the model that answered, not the alias asked for
+    assert "--model" in be.command()
+    assert "--model" not in fc.ClaudeCodeBackend(model=None, cwd=tmp_path / "cwd2").command()
     assert (tmp_path / "cwd" / "forecaster_system_prompt.txt").read_text().startswith("You are a careful forecaster")
 
 

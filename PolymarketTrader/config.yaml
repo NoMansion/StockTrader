@@ -35,7 +35,11 @@ forecaster:
   #               which can exceed the expected profit of a $20 bet. Use only with a reason.
   # file        = questions written to data/requests/, answers read from data/forecasts/ (a Claude session fills them).
   backend: "claude_code"
-  model: "opus"                   # CLI alias; the API backend uses api_model
+  # Claude Code model alias ("opus", "fable", "sonnet") or null for whatever Claude Code defaults to on this PC.
+  # The research says the strength of the model matters more than anything else in the pipeline, so prefer the
+  # strongest one your plan's usage allows, then leave it alone: a model change starts a new track record.
+  # The model that actually answered is stored with every forecast.
+  model: "opus"
   api_model: "claude-opus-5-5"
   effort: "high"
   runs: 3                         # independent runs per market; the median is used
