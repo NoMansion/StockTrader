@@ -135,7 +135,7 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   ticker), minimum volume 1, first pass 2,500 random markets per category, Economics first. Panel uses the
   random sample only. Next round must be on the random sample and must say whether the r02-r04 pattern survives.
 
-- 4:55 pm CST (check-in 5, 22:55 UTC): r05/r06 superseded the same hour by **r07** (after the schedule fix, with
+- 4:40 pm CST (check-in 5, 22:40 UTC): r05/r06 superseded the same hour by **r07** (after the schedule fix, with
   families 16 to 26). Random Economics and Politics: 0 pass; the r02-r04 "dear side loses" pattern is gone
   (report 3.6). Busy markets, Economics + Politics at 45,000 contracts: 22 pass, 49 leads, all "buy NO where
   YES is cheap" (report 3.7). The 5-cent rule taken apart (3.8): tail test passes both halves; small in dollars;

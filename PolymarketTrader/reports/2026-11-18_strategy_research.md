@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 4:55 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 4:40 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **One mechanical result has held up: in busy markets, cheap YES contracts are overpriced, and buying NO
   against them has paid.** Where YES is quoted at 5 cents or less in a market that has already traded 45,000
@@ -321,7 +321,7 @@ against a cheap NO is about zero. So there is also a general lean toward YES bei
 Economics alone at the lower 13,100-contract level shows the same (8 pass, all of this kind). The busy-market
 condition matters: in random Economics, most of which is thin, the same bets lose 2% to 6%.
 
-### 3.8 The 5-cent rule taken apart (4:45 pm CST)
+### 3.8 The 5-cent rule taken apart (4:40 pm CST)
 
 Rule: busy market, YES at 5 cents or less, spread 5 cents or less, 30 days or less to the scheduled end; buy NO.
 
@@ -351,7 +351,7 @@ The tail test passes in both halves: even the pessimistic loss rate is below bre
 - *Dollars.* 220 to 265 bets in the last half year at $10 to $20 each is a few dollars a month on $1,000.
 - *Two categories, five and a half months out of sample.*
 
-### 3.9 Forward: what was started, and what was not changed (4:50 pm CST)
+### 3.9 Forward: what was started, and what was not changed (4:40 pm CST)
 
 - **Observation log, no orders.** `scripts/shadow_longshot.py` looks at live Kalshi markets that meet the
   5-cent rule and records the quote, the contracts resting at the NO ask, what a $20 order would have paid on
