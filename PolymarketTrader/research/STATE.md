@@ -150,6 +150,11 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   starts somewhere above 10,000 contracts: test it properly when the Economics census reaches 5,000
   (`--sample liquid` with no `--min-cumvol`), and write the answer into the report.
 
+- 5:55 pm CST (check-in 7): CONTAINER RESTARTED about 5:45 pm; `data/` survived; jobs and keep-awake restarted.
+  Economics census complete to 5,000 contracts. Round r08 (report 3.11): 5-cent rule holds at that level (tail
+  test passes both halves; 2024 a losing year); the wider NO edge (5-35c) fades to zero at this level. Politics
+  random pass resumed, then its census, then Companies.
+
 ## How to run a round
 
 ```

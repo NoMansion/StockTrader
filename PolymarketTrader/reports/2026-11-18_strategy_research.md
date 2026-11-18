@@ -402,3 +402,32 @@ Gaps are in percentage points. Busy: Economics and Politics, 1,105 events. Rando
   weak, the bot's own "busy" bar ($1,000 traded) is lower than the level tested here, and the correction
   should first be re-measured at that level and on more categories. It is on the list.
 
+### 3.11 Round r08: Economics at the lower volume level (5:55 pm CST)
+
+**Data.** The Economics census is now complete down to 5,000 contracts: 5,289 markets in 1,397 events seen from
+the day they had traded 5,150 contracts (was 3,187 markets at 13,100). 2,761 rules: 26 pass, 52 leads, 51 lose.
+Every pass is again "buy NO where YES is very cheap".
+
+| 5-cent rule, Economics, 5,150+ contracts | Taker | Resting order |
+|---|---|---|
+| Bets, events | 1,076 in 554 | 786 in 440 |
+| Mean return per bet | +1.27% | +3.35% |
+| Losing events in / out of sample | 6 of 379 / 3 of 176 | 4 of 289 / 3 of 152 |
+| Break-even loss rate; 95% upper bound on the true rate | 4.0%; 2.8% | 7.2%; 3.0% |
+| Account replay at 1% stakes, before April 2026 / after | +1.3% a year / +9.0% a year | +3.2% / +15.0% a year |
+| Entry days with under 100 contracts traded | 24% | 18% |
+
+- **The rule holds at the lower level**, and the tail test passes in both halves.
+- **2024 was a losing year for it** at this level: 80 bets, 4 total losses, −3.0% per bet. The 45,000-contract
+  sample had no 2024 loss, so the smaller markets carry more of the tail. A year like that costs about three
+  years of the rule's pre-2026 income.
+- **The wider mispricing fades as markets get smaller.** Paying the ask for NO against YES at 5 to 35 cents is
+  about zero here (+0.6% / +0.4% at 5 to 10c, −0.5% / −0.1% at 10 to 20c), against +2% to +4% at 45,000
+  contracts. The price gap of section 3.10 is 2 to 3 points here instead of 3 to 5. With the random-sample
+  result (under 1,000 contracts: negative) this is a steady gradient: the more a market has traded, the more
+  overpriced its cheap YES.
+- **Thinner entries.** A quarter of entry days traded under 100 contracts, twice the share at the higher level.
+
+**Housekeeping.** The session's container was restarted at about 5:45 pm CST. The data survived; the download
+and the paper loop were restarted within two minutes.
+
