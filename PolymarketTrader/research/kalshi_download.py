@@ -26,8 +26,9 @@ sys.path.insert(0, str(ROOT))
 
 from src.kalshi_http import KalshiError, KalshiHTTP  # noqa: E402
 
-CATEGORIES = ["Economics", "Financials", "Politics", "Elections", "Companies", "Commodities", "Science and Technology",
-              "Climate and Weather", "Crypto", "Entertainment", "Mentions", "Health", "Social", "World", "Sports"]
+# In the order they are downloaded: the categories the paper bot trades first, the giant ones last.
+CATEGORIES = ["Economics", "Politics", "Companies", "Commodities", "Science and Technology", "Elections", "Health",
+              "World", "Financials", "Mentions", "Entertainment", "Crypto", "Social", "Climate and Weather", "Sports"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS series (ticker TEXT PRIMARY KEY, category TEXT, title TEXT, fee_type TEXT, fee_multiplier REAL,
@@ -38,7 +39,8 @@ CREATE TABLE IF NOT EXISTS markets (ticker TEXT PRIMARY KEY, series TEXT, event 
 CREATE INDEX IF NOT EXISTS markets_series ON markets (series);
 CREATE INDEX IF NOT EXISTS markets_todo ON markets (candles_done, category, volume);
 CREATE TABLE IF NOT EXISTS candles (ticker TEXT, ts INTEGER, bid REAL, ask REAL, bid_hi REAL, bid_lo REAL, ask_hi REAL,
-    ask_lo REAL, px REAL, px_hi REAL, px_lo REAL, vol REAL, oi REAL, PRIMARY KEY (ticker, ts)) WITHOUT ROWID;
+    ask_lo REAL, px REAL, px_hi REAL, px_lo REAL, vol REAL, oi REAL, bid_op REAL, ask_op REAL, px_mean REAL,
+    PRIMARY KEY (ticker, ts)) WITHOUT ROWID;
 """
 
 
@@ -137,7 +139,8 @@ def candle_rows(ticker, cs):
             return num(first(d, field + "_dollars", field))
         out.append((ticker, c.get("end_period_ts"), g("yes_bid", "close"), g("yes_ask", "close"), g("yes_bid", "high"),
                     g("yes_bid", "low"), g("yes_ask", "high"), g("yes_ask", "low"), g("price", "close"), g("price", "high"),
-                    g("price", "low"), num(first(c, "volume_fp", "volume")), num(first(c, "open_interest_fp", "open_interest"))))
+                    g("price", "low"), num(first(c, "volume_fp", "volume")), num(first(c, "open_interest_fp", "open_interest")),
+                    g("yes_bid", "open"), g("yes_ask", "open"), g("price", "mean")))
     return [r for r in out if r[1]]
 
 
@@ -163,7 +166,7 @@ def phase_candles(db, k, categories, min_volume, max_markets, max_days):
                             else f"/series/{series}/markets/{ticker}/candlesticks")
                     try:
                         cs = k.get(path, start_ts=start, end_ts=cl + 86400, period_interval=1440).get("candlesticks") or []
-                        db.executemany("INSERT OR IGNORE INTO candles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", candle_rows(ticker, cs))
+                        db.executemany("INSERT OR IGNORE INTO candles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", candle_rows(ticker, cs))
                         if not cs:
                             status = 2              # no bars: never quoted
                     except KalshiError as e:
@@ -191,6 +194,7 @@ def main():
     ap.add_argument("--categories", default=",".join(c for c in CATEGORIES if c != "Sports"))
     ap.add_argument("--min-volume", type=float, default=200.0, help="contracts traded: smaller markets get no bars")
     ap.add_argument("--max-markets", type=int, default=10 ** 9)
+    ap.add_argument("--first-pass", type=int, default=6000, help="markets per category to get bars for in the first pass")
     ap.add_argument("--max-per-series", type=int, default=200000)
     ap.add_argument("--max-days", type=int, default=400)
     ap.add_argument("--interval", type=float, default=0.2, help="seconds between requests")
@@ -203,7 +207,13 @@ def main():
     k = KalshiHTTP(min_interval=args.interval)
     if args.phase in ("all", "series"):
         phase_series(db, k, cats)
-    if args.phase in ("all", "markets"):
+    if args.phase == "all":
+        # First pass, one category at a time: list its markets, then fetch bars for its biggest ones. Analysis can
+        # start on the first categories while the later ones are still downloading.
+        for cat in cats:
+            phase_markets(db, k, [cat], args.max_per_series, "hist")
+            phase_candles(db, k, [cat], args.min_volume, args.first_pass, args.max_days)
+    if args.phase == "markets":
         phase_markets(db, k, cats, args.max_per_series, "hist")
     if args.phase in ("all", "candles"):
         phase_candles(db, k, cats, args.min_volume, args.max_markets, args.max_days)
