@@ -89,10 +89,15 @@ portfolio:
   # vs 1.06 for "equal", 1.09 for no rule, 1.07 for a 15% cap. 25% is the centre of the plateau.
   sector_mode: "cap"
   sector_cap: 0.25
-  # Exposure control (src/exposure.py): 15% vol target on the universe index,
-  # halved when the universe 12m return is negative, halved again while NYSE
-  # new highs minus new lows summed over 10 days is negative. Scales the invested budget.
-  exposure: {vt: 15, ret_days: 252, ret_low: 0.5, hl_days: 10}
+  # Exposure control (src/exposure.py): 15% vol target on the universe index (10-day vol),
+  # halved when the universe 12m return is negative, halved while NYSE new highs minus
+  # new lows summed over 5 days is negative, halved while the NYSE A/D line is below its
+  # 100-day MA. Scales the invested budget.
+  # Since 2026-11-18 (rounds 63-66): vt_win 20 -> 10, hl_days 10 -> 5, A/D gate added.
+  # Stitched Sharpe 1.408 vs 1.348 for the previous settings in the same build (2000s 1.768
+  # vs 1.760, CAGR 15.1% vs 14.7%, max drawdown -17.1% vs -21.8%); all 10 neighbour cells
+  # 1.377-1.421. Under the measured cost-by-rank schedule 1.377 vs 1.324.
+  exposure: {vt: 15, vt_win: 10, ret_days: 252, ret_low: 0.5, hl_days: 5, ad_ma: 100}
   # Idle-cash sleeve (src/sleeve.py): cash above cash_buffer that the exposure layer leaves
   # uninvested goes into these ETFs. Sweep: always-equal IEF+GLD = +0.14 Sharpe, +2.8 pts CAGR
   # over 26 years, worst year -12%. null = off (cash stays cash).
