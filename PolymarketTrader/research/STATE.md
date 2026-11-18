@@ -17,10 +17,18 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 
 ## Rules for judging a result (do not relax these)
 
-0. **Use only the random sample.** `panel.load()` does this by default. The first 5,840 markets were downloaded
-   biggest-first, which selects on lifetime volume (hindsight) and over-samples surprises: results from them
-   (report 3.1 to 3.5) are provisional. Never pass `sample="all"` to judge a rule, and never filter on
-   `tot_vol`: use `cumvol` or `dvol7`, which are known at the bar.
+0. **Two samples are valid, nothing else.** `--sample random` (default): every market that ever traded, in the
+   download's fixed shuffle; mostly tiny markets with wide quotes. `--sample liquid`: the census of busy markets,
+   where a market is seen only from the bar at which it had traded the census level (`cumvol`), so the
+   biggest-first download carries no hindsight. Never pass `sample="all"` to judge a rule, never filter on
+   `tot_vol`: use `cumvol` or `dvol7`, which are known at the bar. Rounds r01 to r04 (report 3.1 to 3.5) used
+   neither and are superseded.
+0b. **Days to close come from the schedule.** Kalshi rewrites `close_time` when a market closes early, so
+   `dte` uses the expected expiration for markets that can close early (`markets.early`, `markets.exp_ts`;
+   `panel.describe` prints "SCHEDULE MISSING" if the back-fill has not reached a category). Holding times in
+   `analyze_rule.py` and `portfolio.py` use the real close.
+0c. **Lopsided bets get the tail test, not a t-statistic.** For anything bought above about 85c run
+   `research/analyze_rule.py`: losing events against the break-even loss rate with an exact upper bound.
 1. **Costs in.** Taker entries pay the ask plus Kalshi's fee, 0.07 × p × (1 − p) per contract (some series carry
    a different multiplier: `series.fee_multiplier`). Maker entries are counted only when a later bar shows the
    price trading through the order, and are reported separately from taker results.
@@ -41,7 +49,13 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 
 Start whatever is not running, at any time: **`bash research/start_jobs.sh`** (from `PolymarketTrader/`). It
 starts the Kalshi history download (resumable; log `data/kalshi_download.log`) and the paper loop
-(`scripts/paper_loop.py`, one cycle every 3 h by the ledger's clock; log `data/run_cycle.log`).
+(`scripts/paper_loop.py`, one cycle every 3 h by the ledger's clock; log `data/run_cycle.log`). After each cycle
+the loop also runs `scripts/shadow_longshot.py`: the forward observation log of the longshot rule (no orders; its
+own file `data/shadow.db`; `python3 scripts/shadow_longshot.py --report` for the summary to quote in the report).
+
+Download order per category: list its settled markets (with scheduled end dates), back-fill schedules for older
+listings, 2,500 random markets' bars, then the census (every market with 5,000+ lifetime contracts, biggest
+first, at most 8,000). `research/panel.py` works out by itself how far down the census is complete.
 
 **THE MACHINE SLEEPS WHEN THE SESSION IS IDLE** (found 20:21: `uptime` showed 3 minutes; the download's last write
 was 2 minutes after the previous turn ended). Detached jobs do not keep it awake. A task tracked by the session
