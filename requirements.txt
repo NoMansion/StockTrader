@@ -10,4 +10,5 @@ pyarrow>=14.0
 pytest>=7.0
 streamlit>=1.35
 requests>=2.31
+matplotlib>=3.8          # Discord report images (scripts/discord_report.py)
 norgatedata>=1.0.70 ; platform_system == "Windows"
