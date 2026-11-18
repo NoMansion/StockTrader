@@ -36,7 +36,7 @@ def main() -> int:
     ap.add_argument("--db", default=str(panel.DB))
     ap.add_argument("--categories", default="")
     ap.add_argument("--min-events", type=int, default=100)
-    ap.add_argument("--split", default="", help="in/out-of-sample boundary, e.g. 2026-04-01 (default 2025-07-01)")
+    ap.add_argument("--split", default="", help="in/out-of-sample boundary (default 2026-04-01)")
     args = ap.parse_args()
     cats = [c.strip() for c in args.categories.split(",") if c.strip()] or None
     t0 = time.time()

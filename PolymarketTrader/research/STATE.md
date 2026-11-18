@@ -20,8 +20,10 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 1. **Costs in.** Taker entries pay the ask plus Kalshi's fee, 0.07 × p × (1 − p) per contract (some series carry
    a different multiplier: `series.fee_multiplier`). Maker entries are counted only when a later bar shows the
    price trading through the order, and are reported separately from taker results.
-2. **Out of sample.** Choose settings on markets that closed before 2025-07-01; report the result on markets
-   closing after it. A strategy that only works in-sample is not a result.
+2. **Out of sample.** Choose settings on markets that closed before 2026-04-01; report the result on markets
+   closing from that date. The date was fixed on 2026-11-18 from the calendar alone, before any result was seen:
+   Kalshi's history is concentrated in 2026 (for Economics, 43% of events closed before April 2026; for Weather,
+   58%). A strategy that only works in-sample is not a result. Do not move the date.
 3. **Errors clustered by event.** Markets of one event move together. t-statistics use one observation per event
    (or event-day), never one per market.
 4. **Multiple testing.** With N variants tried in a family, the best is expected to look good by luck. Require

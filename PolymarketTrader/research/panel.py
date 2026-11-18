@@ -24,7 +24,10 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 DB = ROOT / "data" / "kalshi_hist.db"
 TAKER, MAKER = 0.07, 0.0175
-SPLIT_TS = int(pd.Timestamp("2025-07-01", tz="UTC").timestamp())      # in-sample before, out-of-sample after
+# In sample: markets closing before this date. Out of sample: from it. Fixed on 2026-11-18 from the calendar alone,
+# before any result was seen: Kalshi's volume is so concentrated in 2026 that an earlier date leaves almost
+# nothing in sample for most categories, and 2026-04-01 puts roughly half of all events on each side.
+SPLIT_TS = int(pd.Timestamp("2026-04-01", tz="UTC").timestamp())
 
 
 def set_split(date: str) -> None:
@@ -147,7 +150,7 @@ def describe(df: pd.DataFrame) -> str:
     m = df.drop_duplicates("ticker")
     lines = [f"{len(m):,} markets, {m['event'].nunique():,} events, {len(df):,} daily bars; "
              f"closes {pd.to_datetime(m['close_ts'].min(), unit='s').date()} to {pd.to_datetime(m['close_ts'].max(), unit='s').date()}; "
-             f"{int(m['oos'].sum()):,} markets out of sample (closing from 2025-07-01)"]
+             f"{int(m['oos'].sum()):,} markets out of sample (closing from {pd.to_datetime(SPLIT_TS, unit='s').date()})"]
     by = m.groupby("category").agg(markets=("ticker", "size"), events=("event", "nunique"), yes=("y", "mean"), oos=("oos", "sum"))
     for cat, r in by.iterrows():
         lines.append(f"  {cat:24s} {int(r.markets):7,} markets {int(r.events):6,} events  resolved yes {r.yes:5.1%}  out of sample {int(r.oos):6,}")

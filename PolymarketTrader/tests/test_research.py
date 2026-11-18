@@ -115,3 +115,23 @@ def test_a_planted_bias_is_found_on_the_right_side(tmp_path):
     assert ins.ret > 0.01 and oos.ret > 0.01 and oos.t > 3 and verdict(r) == "pass"
     ins2, oos2 = p.evaluate(f.base & f.price(0.08, 0.30), "yes", "tk")  # and buying them should lose badly
     assert oos2.ret < -0.15 and oos2.t < -3
+
+
+def test_account_replay_locks_money_until_settlement(tmp_path):
+    import portfolio
+    path = tmp_path / "biased.db"
+    make_db(path, n_events=3000, longshot_bias=0.06)
+    p = Panel(panel.load(path))
+    f = Features(p)
+    good = [(f.base & f.price(0.08, 0.30), "no", "tk")]
+    bad = [(f.base & f.price(0.08, 0.30), "yes", "tk")]
+    ins, oos = portfolio.run(p, good, stake_frac=0.01, event_cap=0.03, max_exposure=0.5)
+    assert oos.bets > 300 and oos.total > 0 and oos.max_dd < 0.25 and 0 < oos.exposure <= 0.5
+    _, lose = portfolio.run(p, bad, stake_frac=0.01, event_cap=0.03, max_exposure=0.5)
+    assert lose.total < 0
+    # a tighter exposure cap means fewer bets are taken
+    _, tight = portfolio.run(p, good, stake_frac=0.01, event_cap=0.03, max_exposure=0.05)
+    assert tight.bets < oos.bets and tight.skipped > 0
+    # one bet, by hand: $1,000, 1% stake, return +20% -> $1,002
+    one = portfolio.simulate(np.array([[0.0, 86400.0, 0.20, 1.0]]), stake_frac=0.01)
+    assert one.bets == 1 and one.total == pytest.approx(0.002)

@@ -4,7 +4,7 @@ A rule is: a condition on what was known at the end of a bar, a side (YES or NO)
 next bar's opening quote, or rest a bid and count it only if the market trades through it). One entry per market:
 the first bar on which the condition holds and an entry was possible. Positions are held to settlement.
 
-Every result is reported twice, in sample (markets closing before 2025-07-01) and out of sample (after), with:
+Every result is reported twice, in sample (markets closing before 2026-04-01) and out of sample (after), with:
   n         bets (one per market)
   events    distinct events among them: the real sample size, because markets of one event move together
   ret       mean return per dollar staked, after fees
