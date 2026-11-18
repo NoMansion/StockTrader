@@ -48,10 +48,14 @@ class Panel:
         self.oos = df["oos"].to_numpy(bool)
         self.y = df["y"].to_numpy("float32")
         self.r = {k: df[col].to_numpy("float32") for k, col in RET.items()}
+        if "r_pair_tk" in df:                       # the ladder pair trade: side "pair", entry "pair"
+            self.r[("pair", "pair")] = df["r_pair_tk"].to_numpy("float32")
         self.ok = {k: ~np.isnan(v) for k, v in self.r.items()}
         # price paid per contract for each side and entry (before fees), for reporting
         self.px = {("yes", "tk"): df["n_ask_op"].to_numpy("float32"), ("no", "tk"): (1 - df["n_bid_op"]).to_numpy("float32"),
                    ("yes", "mk"): df["bid"].to_numpy("float32"), ("no", "mk"): (1 - df["ask"]).to_numpy("float32")}
+        if "pair_cost" in df:
+            self.px[("pair", "pair")] = df["pair_cost"].to_numpy("float32")
 
     def col(self, name: str) -> np.ndarray:
         return self.df[name].to_numpy()
@@ -84,7 +88,7 @@ class Panel:
         key = (side, entry)
         m = mask & self.ok[key]
         rows = self.first_per_market(m) if once else np.flatnonzero(m)
-        pay = self.y if side == "yes" else 1 - self.y
+        pay = self.y if side == "yes" else (self.r[key] > 0).astype("float32") if side == "pair" else 1 - self.y
         o = self.oos[rows]
         return (self.sample(rows[~o], self.r[key], self.px[key], pay), self.sample(rows[o], self.r[key], self.px[key], pay))
 

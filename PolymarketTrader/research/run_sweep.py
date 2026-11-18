@@ -49,16 +49,9 @@ def main() -> int:
     p = Panel(df)
     f = Features(p)
     rows = []
-    pair_r = df["r_pair_tk"].to_numpy("float32")
-    pair_px = df["pair_cost"].to_numpy("float32")
-    pair_pay = (pair_r > 0).astype("float32")
     for family, name, mask, side, entry in all_rules(f, titles_for(df, args.db)):
-        if entry == "pair":
-            ins, oos = p.evaluate_custom(mask, pair_r, pair_px, pair_pay)
-            extra = {"fill": 1.0}
-        else:
-            ins, oos = p.evaluate(mask, side, entry)
-            extra = {"fill": p.fill_rate(mask, side)} if entry == "mk" else {"fill": 1.0}
+        ins, oos = p.evaluate(mask, side, entry)
+        extra = {"fill": p.fill_rate(mask, side)} if entry == "mk" else {"fill": 1.0}
         r = row(family, name, side, entry, ins, oos, **extra)
         r["verdict"] = verdict(r, args.min_events)
         rows.append(r)
