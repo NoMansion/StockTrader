@@ -39,6 +39,13 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 |---|---|---|
 | Kalshi history download | `setsid nohup python3 -u research/kalshi_download.py --interval 0.4 --min-volume 200 --first-pass 2500 >> data/kalshi_download.log 2>&1 < /dev/null &` | `data/kalshi_download.log` |
 
+| Paper bot on Kalshi, every 3 h | `setsid nohup bash -c 'while true; do sleep 10800; python3 scripts/run_cycle.py --config data/cloud_config.yaml >> data/run_cycle.log 2>&1; python3 scripts/export_forecasts.py >> data/run_cycle.log 2>&1; done' > /dev/null 2>&1 < /dev/null &` | `data/run_cycle.log` |
+
+The paper loop is the forward test of Claude's forecasts (family 17). Its ledger is `data/pmt.db` (not committed);
+`python3 scripts/export_forecasts.py` writes the durable copy, `reports/forward_log.csv`, which IS committed: run it
+and commit at every check-in. Check the loop with `pgrep -af "sleep 10800"`. `data/cloud_config.yaml` is
+config.yaml with: no quiet window, 2 runs, medium effort, 4 markets, 40 books, 2 s pacing.
+
 Check with `pgrep -af kalshi_download` and `tail -3 data/kalshi_download.log`. It is resumable: if it died, run
 the same command again. If `data/` is gone (new container), run it again from scratch; listing takes about 1.5
 hours and bars arrive at roughly 8,000 markets an hour.
@@ -79,6 +86,12 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   0 pass, 9 leads, 15 lose. Solid: taker NO against 5-20c longshots loses; taker YES on favourites loses. Leads to
   re-test on other categories: buying thin 5-20c longshots; NO on markets listed 2-7 days ago. Download has
   moved on to Politics (2,526 series to list, then bars).
+
+- 18:52 (check-in 2): slow listing scan stopped (it was starving the download); the bot's listing was built from
+  the full snapshot captured at 11:33 (4,489 markets, valid 20 h; after that the adapter rescans by itself, slowly).
+  FIRST LIVE KALSHI CYCLE DONE: 4 forecasts (3 low confidence, not traded), 1 paper order: resting NO $20 @ 0.65
+  on KXGOVTSHUTDOWN-26DEC12 (Claude 0.205, market 0.345). Paper loop started, every 3 h. Commodities removed from
+  the bot's categories. Download restarted with `--first-pass 2500` (Politics in progress).
 
 ## How to run a round
 
@@ -130,8 +143,8 @@ Forward-only (cannot be backtested):
    settings) before calling it anything.
 2. For rules that pass: run `research/portfolio.py` on them (stake 0.5%, 1%, 2% of equity; event cap 3%;
    exposure cap 50%) and report return per year, drawdown and time in the market.
-3. Finish the bot's live Kalshi run (Progress, 17:26), fix what live data shows, then run a paper cycle every
-   few hours to build the forward record of Claude forecasts (family 17).
+3. Forward test (family 17): the paper loop runs by itself. At each check-in: `tail -20 data/run_cycle.log`,
+   export and commit the forecast log, and note in the report how many forecasts exist and what was traded.
 4. Families still to code: the NO side of ladder inversions; sums of mutually exclusive events (needs the
    event's `mutually_exclusive` flag: download `/historical/events` or `/events/{ticker}`); hourly bars for the
    last two days before close; sports and crypto samples (`--categories Sports` on the downloader, last).
