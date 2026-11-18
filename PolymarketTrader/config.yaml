@@ -6,7 +6,11 @@
 account:
   # "paper" = simulated fills in data/pmt.db, no keys, no money. "live" is not implemented (docs/GO_LIVE.md).
   mode: "paper"
-  venue: "polymarket_us"          # the CFTC-regulated US venue. The international site is closed to US residents.
+  # "kalshi" or "polymarket_us": both are CFTC-regulated and open to US residents. Kalshi is the default because,
+  # measured live on 2026-11-18 with the same filters, it had 570 candidate markets against 96 and 86 deep enough
+  # to trade against 6 or 7; its taker fee is lower (0.07 against 0.095) and it is open in every state.
+  # Switching venue means switching the category names and fees below (the Polymarket US values are in comments).
+  venue: "kalshi"
   paper_bankroll: 1000.0          # dollars the paper account starts with
 
 # ---- Which markets get a forecast (src/universe.py) ----------------------------
@@ -27,14 +31,15 @@ universe:
   depth_band: 0.02
   max_spread: 0.04
   price_range: [0.15, 0.85]       # no longshots, no near-certainties
-  # Categories as the exchange names them (seen live 2026-11-18: sports, politics, culture, macro, technology,
-  # crypto, finance, geopolitics, science, climate). The allow list is also sent to the exchange, so the thousands
-  # of sports events are never downloaded.
-  # Left out on purpose. Sports: retail specialists are the least profitable group, and the state-law fights are
-  # about sports. Crypto: price-threshold markets are bot territory. Culture: award shows and charts, leak-prone.
-  # Climate: weather is a model-versus-model game, not a reading game (possible later module).
-  categories_allow: [macro, finance, technology, politics, geopolitics, science]
-  categories_deny: [sports, esports, crypto, culture, climate, weather, mentions, entertainment]
+  # Categories as the exchange names them. Kalshi (live 2026-11-18): Sports, Elections, Financials, Entertainment,
+  # Crypto, Economics, Politics, Commodities, Mentions, Climate and Weather, Science and Technology, Companies,
+  # Health, Social, World. The allow list decides what is downloaded at all.
+  # Left out on purpose. Sports: retail specialists are the least profitable group. Crypto and Financials: mostly
+  # daily price-range markets, which are bot territory. Entertainment: award shows and charts, leak-prone.
+  # Mentions: a specialist game. Climate and Weather: model against model, not a reading game.
+  # Polymarket US instead uses: [macro, finance, technology, politics, geopolitics, science]
+  categories_allow: [economics, politics, elections, companies, commodities, science and technology, health, world]
+  categories_deny: [sports, esports, crypto, financials, entertainment, culture, climate and weather, climate, weather, mentions]
   max_markets_per_event: 2
   max_events_scanned: 2000
   max_candidates_per_cycle: 4     # forecasts per cycle; each is `forecaster.runs` Claude runs
@@ -89,11 +94,14 @@ execution:
   reentry_cooldown_hours: 72      # after selling a market, stay out of it (both sides) this long
   track_forecasts_days: 7         # keep recording prices of forecast markets this long (for scoring)
 
-# ---- Fees (src/fees.py): fee per share = rate * p * (1 - p), takers only ------------
+# ---- Fees (src/fees.py): fee per contract = rate * p * (1 - p) ----------------------
+# Fallbacks only: each market's own coefficient is used when the exchange gives it. Kalshi: takers 0.07 times the
+# series multiplier; makers nothing, except on series of type "quadratic_with_maker_fees" (0.0175), and each
+# order's fee is rounded up to the cent. Polymarket US: taker_rate 0.095, round_up_cents false.
 fees:
-  taker_rate: 0.095               # fallback only: each market's own feeCoefficient is used when the exchange gives
-                                  # it (0.095 on all 19,110 markets listed on 2026-11-18)
+  taker_rate: 0.07
   maker_rate: 0.0
+  round_up_cents: true
 
 # ---- Safety limits (src/safety.py) ---------------------------------------------
 safety:

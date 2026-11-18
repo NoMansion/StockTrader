@@ -228,7 +228,9 @@ class Trader:
         st = universe.settings(self.cfg)
         try:
             listed = self.venue.list_markets(max_events=int(st["max_events_scanned"]),
-                                             categories=list(st["categories_allow"]) or None)
+                                             categories=list(st["categories_allow"]) or None,
+                                             min_days=float(st["min_days_to_resolution"]),
+                                             max_days=float(st["max_days_to_resolution"]))
         except Exception as e:
             res.say(f"market listing failed ({brief(e)}): no new forecasts this cycle")
             return []
@@ -332,7 +334,10 @@ class Trader:
                 return None
             p = book.best_bid + tick if book.spread >= 2 * tick - 1e-9 else book.best_bid
             return round(min(p, book.best_ask - tick), 4)
-        return passive(yes), passive(no), 0.0, 0.0
+        py, pn = passive(yes), passive(no)
+        maker = m.maker_fee_rate if m.maker_fee_rate is not None else self.fees.maker_rate
+        mfee = lambda p: maker * p * (1.0 - p) if p else 0.0      # some venues charge resting orders a little
+        return py, pn, mfee(py), mfee(pn)
 
     def entries(self, forecasts: list[tuple[Market, Forecast, int, float]], equity: float, acct: safety.AccountCheck,
                 res: CycleResult, now: float) -> None:
@@ -417,7 +422,8 @@ class Trader:
                 res.say(f"{m.market_id}: BUY {sz.side} ${spent:,.2f} taken ({sz.reason})")
             else:
                 tick = m.tick or self.tick
-                price = min(sz.cost, math.floor(sz.limit_price / tick + 1e-9) * tick)   # on the market's price grid
+                quote = py if sz.side == "YES" else pn                                   # the passive price, before fees
+                price = min(quote, math.floor(sz.limit_price / tick + 1e-9) * tick)     # on the market's price grid
                 price = round(price, 4)
                 self.broker.place_resting(res.run_id, m.market_id, sz.side, book.token_id, price, stake, decision_id=did, now=now)
                 spent = stake

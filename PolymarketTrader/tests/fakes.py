@@ -135,3 +135,68 @@ class TableForecaster:
         base = {"market_id": m.market_id, "p_runs": [kw["p_yes"]] * 3, "confidence": "medium", "rules_clear": True,
                 "flags": [], "rationale": "table", "backend": self.name, "model": "none", "ts": now or time.time()}
         return Forecast(**{**base, **kw})
+
+
+class FakeKalshiHTTP:
+    """Stands in for src.kalshi_http.KalshiHTTP: answers the public paths the adapter uses, in the live shapes
+    (see tests/fixtures/kalshi_cpi_yoy.json)."""
+
+    def __init__(self, now: float):
+        self.now, self.requests, self.rate_limited = now, 0, 0
+        self.series = {"KXCPIYOY": {"ticker": "KXCPIYOY", "category": "Economics", "fee_type": "quadratic_with_maker_fees",
+                                    "fee_multiplier": 1, "tags": ["Inflation"]},
+                       "KXNBA": {"ticker": "KXNBA", "category": "Sports", "fee_type": "quadratic", "fee_multiplier": 1, "tags": []}}
+        self.markets: dict[str, dict] = {}
+        self.books: dict[str, dict] = {}
+
+    def add(self, ticker: str, series: str = "KXCPIYOY", days: float = 20, bid: float = 0.48, ask: float = 0.50,
+            size: float = 500, volume: float = 50000, title: str = None):
+        event = f"{series}-26NOV"
+        self.markets[ticker] = {
+            "ticker": ticker, "event_ticker": event, "status": "active", "result": "", "market_type": "binary",
+            "title": title or f"Will {ticker} be above the threshold?", "yes_sub_title": "Above 3.6%",
+            "rules_primary": "If the Consumer Price Index increases by more than 3.6% in the twelve months ending "
+                             "November 2026, as reported by the Bureau of Labor Statistics, then the market resolves to Yes.",
+            "rules_secondary": "", "close_time": iso(self.now + days * 86400), "volume_fp": f"{volume:.2f}",
+            "open_interest_fp": "9000.00", "price_ranges": [{"start": "0.0000", "end": "1.0000", "step": "0.0100"}]}
+        self.set_book(ticker, bid, ask, size)
+        return self
+
+    def set_book(self, ticker: str, bid: float, ask: float, size: float = 500):
+        m = self.markets[ticker]
+        m["yes_bid_dollars"], m["yes_ask_dollars"] = f"{bid:.4f}", f"{ask:.4f}"
+        self.books[ticker] = {"orderbook_fp": {
+            "yes_dollars": [[f"{bid - 0.01:.4f}", f"{size * 2:.2f}"], [f"{bid:.4f}", f"{size:.2f}"]],
+            "no_dollars": [[f"{1 - ask - 0.01:.4f}", f"{size * 2:.2f}"], [f"{1 - ask:.4f}", f"{size:.2f}"]]}}
+
+    def settle(self, ticker: str, result: str):
+        self.markets[ticker].update(status="finalized", result=result,
+                                    settlement_value_dollars="1.0000" if result == "yes" else "0.0000")
+
+    def get(self, path: str, tries: int = 6, **params):
+        from src.kalshi_http import KalshiError
+        self.requests += 1
+        if path == "/series":
+            return {"series": [s for s in self.series.values() if s["category"] == params.get("category")]}
+        if path.startswith("/series/"):
+            return {"series": self.series[path.split("/")[2]]}
+        if path == "/markets":
+            lo, hi = params.get("min_close_ts", 0), params.get("max_close_ts", 9e18)
+            from src.venue import parse_time
+            return {"markets": [m for m in self.markets.values()
+                                if m["status"] == "active" and lo <= parse_time(m["close_time"]) <= hi], "cursor": ""}
+        if path.startswith("/markets/") and path.endswith("/orderbook"):
+            return self.books[path.split("/")[2]]
+        if path.startswith("/markets/"):
+            t = path.split("/")[2]
+            if t not in self.markets:
+                raise KalshiError(404, path, "not found")
+            return {"market": dict(self.markets[t])}
+        if path.startswith("/events/"):
+            return {"event": {"event_ticker": path.split("/")[2], "title": "CPI YoY in November", "category": "Economics",
+                              "settlement_sources": [{"name": "Bureau of Labor Statistics", "url": "https://www.bls.gov/cpi/"}]}}
+        raise KalshiError(404, path, "not found")
+
+    def pages(self, path: str, key: str, **params):
+        params.pop("limit", None); params.pop("max_pages", None); params.pop("tries", None)
+        yield from self.get(path, **params)[key]

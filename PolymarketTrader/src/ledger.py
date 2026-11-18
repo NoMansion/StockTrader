@@ -22,7 +22,8 @@ CREATE TABLE IF NOT EXISTS markets (
     event_id TEXT, event_title TEXT, category TEXT, end_ts REAL, neg_risk INTEGER DEFAULT 0,
     yes_token TEXT, no_token TEXT, first_seen REAL, last_seen REAL,
     closed INTEGER DEFAULT 0, resolved_ts REAL, payout_yes REAL,         -- 1, 0 or 0.5 once resolved
-    checked_ts REAL                                                      -- last time resolution was looked up
+    checked_ts REAL,                                                     -- last time resolution was looked up
+    fee_rate REAL, maker_fee_rate REAL                                   -- this market's own fee coefficients
 );
 CREATE TABLE IF NOT EXISTS snapshots (
     id INTEGER PRIMARY KEY, ts REAL, market_id TEXT, bid REAL, ask REAL, mid REAL,
@@ -73,6 +74,10 @@ class Ledger:
         self.db = sqlite3.connect(str(self.path), timeout=30)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        have = {r["name"] for r in self.db.execute("PRAGMA table_info(markets)")}
+        for col in ("checked_ts", "fee_rate", "maker_fee_rate"):       # ledgers created before these existed
+            if col not in have:
+                self.db.execute(f"ALTER TABLE markets ADD COLUMN {col} REAL")
         self.db.commit()
 
     def close(self) -> None:
@@ -124,15 +129,18 @@ class Ledger:
         ts = ts or time.time()
         self.db.execute(
             """INSERT INTO markets (market_id, condition_id, slug, question, rules, event_id, event_title, category,
-                                    end_ts, neg_risk, yes_token, no_token, first_seen, last_seen)
+                                    end_ts, neg_risk, yes_token, no_token, first_seen, last_seen, fee_rate, maker_fee_rate)
                VALUES (:market_id, :condition_id, :slug, :question, :rules, :event_id, :event_title, :category,
-                       :end_ts, :neg_risk, :yes_token, :no_token, :ts, :ts)
+                       :end_ts, :neg_risk, :yes_token, :no_token, :ts, :ts, :fee_rate, :maker_fee_rate)
                ON CONFLICT(market_id) DO UPDATE SET question=excluded.question, rules=excluded.rules,
                    event_id=excluded.event_id, event_title=excluded.event_title, category=excluded.category,
                    end_ts=excluded.end_ts, neg_risk=excluded.neg_risk, yes_token=excluded.yes_token,
-                   no_token=excluded.no_token, last_seen=excluded.last_seen""",
+                   no_token=excluded.no_token, last_seen=excluded.last_seen,
+                   fee_rate=COALESCE(excluded.fee_rate, fee_rate),
+                   maker_fee_rate=COALESCE(excluded.maker_fee_rate, maker_fee_rate)""",
             {"condition_id": None, "slug": None, "rules": None, "event_id": None, "event_title": None,
-             "category": None, "end_ts": None, "neg_risk": 0, "yes_token": None, "no_token": None, **m, "ts": ts})
+             "category": None, "end_ts": None, "neg_risk": 0, "yes_token": None, "no_token": None,
+             "fee_rate": None, "maker_fee_rate": None, **m, "ts": ts})
         self.db.commit()
 
     def market(self, market_id: str):

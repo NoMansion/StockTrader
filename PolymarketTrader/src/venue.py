@@ -47,6 +47,8 @@ class Market:
     tick: float | None = None           # price increment for this market
     min_qty: float | None = None        # smallest order, in contracts
     fee_rate: float | None = None       # taker fee coefficient for this market
+    maker_fee_rate: float | None = None # maker fee coefficient (0 or None on most markets)
+    open_interest: float | None = None  # contracts outstanding, where the listing gives it
     best_bid: float | None = None       # quotes as shown in the listing (may be seconds stale)
     best_ask: float | None = None
     n_event_markets: int = 1
@@ -68,7 +70,8 @@ class Market:
     def ledger_row(self) -> dict:
         return {"market_id": self.market_id, "slug": self.market_id, "question": self.question, "rules": self.rules,
                 "event_id": self.event_id, "event_title": self.event_title, "category": self.category,
-                "end_ts": self.end_ts, "yes_token": self.yes_token, "no_token": self.no_token}
+                "end_ts": self.end_ts, "yes_token": self.yes_token, "no_token": self.no_token,
+                "fee_rate": self.fee_rate, "maker_fee_rate": self.maker_fee_rate}
 
 
 def parse_time(v) -> float | None:
@@ -222,7 +225,7 @@ class PolymarketUS:
             return fn(*args)
 
     def list_markets(self, max_events: int = 2000, page: int = 100, categories: list[str] | None = None,
-                     **filters) -> list[Market]:
+                     min_days: float | None = None, max_days: float | None = None, **filters) -> list[Market]:
         """Open markets, via the events listing (each event carries its markets). `categories` is applied by the
         exchange: the full listing is thousands of events, most of them sports."""
         out: list[Market] = []

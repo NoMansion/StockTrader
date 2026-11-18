@@ -31,6 +31,8 @@ def main() -> int:
         db.unlink()
     cfg = load_config()
     cfg["safety"]["kill_switch"] = "data/DEMO_STOP"
+    cfg["universe"]["categories_allow"] = ["macro"]          # the made-up exchange speaks Polymarket's category names
+    cfg["fees"] = {"taker_rate": 0.095, "maker_rate": 0.0}
     ex = (FakeExchange(NOW)
           .add("cpi-above-3", title="Will January CPI inflation be above 3.0%?", bid=0.44, ask=0.46)
           .add("fed-holds-march", title="Will the Fed hold rates in March?", bid=0.61, ask=0.63)

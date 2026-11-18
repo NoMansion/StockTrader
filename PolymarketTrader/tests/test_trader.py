@@ -13,7 +13,9 @@ H = 3600.0
 def cfg(**over):
     c = {
         "account": {"mode": "paper"},
-        "universe": {"max_candidates_per_cycle": 4, "reforecast_after_hours": 48},
+        "universe": {"max_candidates_per_cycle": 4, "reforecast_after_hours": 48,       # the offline exchange uses
+                     "categories_allow": ["macro", "finance", "technology", "politics"],  # Polymarket's category names
+                     "categories_deny": ["sports", "crypto", "culture"]},
         "forecaster": {"flags_block": True},
         "sizing": {"shrink_weight": 0.5, "kelly_fraction": 0.25, "min_edge": 0.04, "max_disagreement": 0.30, "max_position_pct": 0.02,
                    "max_event_pct": 0.04, "max_category_pct": 0.20, "max_total_exposure_pct": 0.40,

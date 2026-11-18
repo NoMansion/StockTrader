@@ -35,8 +35,10 @@ DEFAULTS = {
     # Categories as the exchange names them (seen live 2026-11-18: sports, politics, culture, macro, technology,
     # crypto, finance, geopolitics, science, climate). The allow list is also sent to the exchange, so the
     # thousands of sports events are never downloaded. Empty allow list = everything not denied.
-    "categories_allow": ["macro", "finance", "technology", "politics", "geopolitics", "science"],
-    "categories_deny": ["sports", "esports", "crypto", "culture", "climate", "weather", "mentions", "entertainment"],
+    "categories_allow": ["economics", "politics", "elections", "companies", "commodities", "science and technology",
+                         "health", "world"],
+    "categories_deny": ["sports", "esports", "crypto", "financials", "entertainment", "culture", "climate and weather",
+                        "climate", "weather", "mentions"],
     # Title patterns (regular expressions, case-insensitive) that drop a market whatever its category.
     "title_deny": [
         r"\bup or down\b", r"\b(5|15|30)[- ]?min", r"\bhourly\b",                       # short-dated price bets

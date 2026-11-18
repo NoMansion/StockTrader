@@ -11,6 +11,7 @@ code uses the HIGHER number, so a fee surprise can only make a real fill cheaper
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 # Fallback taker rates, fee = rate * p * (1 - p) per share.
@@ -25,13 +26,21 @@ class FeeModel:
     taker_rate: float = POLYMARKET_US_ENTRY_TIER
     maker_rate: float = 0.0
     by_category: dict[str, float] = field(default_factory=dict)   # category -> taker rate override
+    round_up_cents: bool = False        # Kalshi rounds each order's total fee up to the next cent
 
     @classmethod
     def from_config(cls, cfg: dict | None) -> "FeeModel":
         f = (cfg or {}).get("fees") or {}
         return cls(taker_rate=float(f.get("taker_rate", POLYMARKET_US_ENTRY_TIER)),
                    maker_rate=float(f.get("maker_rate", 0.0)),
-                   by_category={str(k).lower(): float(v) for k, v in (f.get("by_category") or {}).items()})
+                   by_category={str(k).lower(): float(v) for k, v in (f.get("by_category") or {}).items()},
+                   round_up_cents=bool(f.get("round_up_cents", False)))
+
+    def order_fee(self, raw: float) -> float:
+        """The fee actually charged for one order whose per-contract fees add up to `raw`."""
+        if not self.round_up_cents or raw <= 0:
+            return raw
+        return math.ceil(raw * 100.0 - 1e-9) / 100.0
 
     def rate(self, category: str | None = None, maker: bool = False, market_rate: float | None = None) -> float:
         if maker:

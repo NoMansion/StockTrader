@@ -160,7 +160,9 @@ def mk(lite=True, **kw):
     return m
 
 
-ST = universe.settings({})
+PM = {"universe": {"categories_allow": ["macro", "finance", "technology", "politics", "geopolitics", "science"],
+                   "categories_deny": ["sports", "esports", "crypto", "culture", "climate", "weather", "mentions"]}}
+ST = universe.settings(PM)                       # these tests use Polymarket's category names
 
 
 @pytest.mark.parametrize("kw, word", [
@@ -212,10 +214,10 @@ def test_prefilter_needs_an_end_date_and_respects_the_allow_list():
     m = mk()
     m.end_ts = None
     assert "end date" in universe.prefilter(m, ST, NOW)
-    only_politics = universe.settings({"universe": {"categories_allow": ["politics"]}})
+    only_politics = universe.settings({"universe": {**PM["universe"], "categories_allow": ["politics"]}})
     assert "allow list" in universe.prefilter(mk(), only_politics, NOW)
     assert universe.prefilter(mk(category="politics"), only_politics, NOW) == ""
-    anything = universe.settings({"universe": {"categories_allow": []}})
+    anything = universe.settings({"universe": {**PM["universe"], "categories_allow": []}})
     assert universe.prefilter(mk(category="pets"), anything, NOW) == ""
 
 
@@ -262,8 +264,8 @@ def test_choose_puts_held_markets_first_and_skips_fresh_forecasts():
           mk(slug="held", category="sports")]
     for m in ms:
         m.event_id = m.market_id
-    keep, dropped = universe.choose(ms, {}, {"c": NOW - 3600}, held={"held"}, now=NOW)
+    keep, dropped = universe.choose(ms, PM, {"c": NOW - 3600}, held={"held"}, now=NOW)
     assert [m.market_id for m in keep] == ["held", "b", "a"]        # a held market is re-forecast even if now filtered
     assert dropped["c"] == "forecast still fresh"
-    keep, _ = universe.choose(ms, {}, {"c": NOW - 72 * 3600, "held": NOW - 3600}, held={"held"}, now=NOW)
+    keep, _ = universe.choose(ms, PM, {"c": NOW - 72 * 3600, "held": NOW - 3600}, held={"held"}, now=NOW)
     assert [m.market_id for m in keep] == ["b", "a", "c"]           # never-forecast markets before re-forecasts

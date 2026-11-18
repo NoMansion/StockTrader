@@ -28,6 +28,12 @@ class PaperBroker:
         self.depth_haircut = float(depth_haircut)
         self.resting_ttl_s = float(resting_ttl_hours) * 3600.0
 
+    def _round_fee(self, fills) -> None:
+        """Apply the venue's order-level fee rounding to a list of fills (the difference goes on the last one)."""
+        if fills:
+            raw = sum(f.fee for f in fills)
+            fills[-1].fee = round(fills[-1].fee + self.fees.order_fee(raw) - raw, 6)
+
     # ---- entries -------------------------------------------------------------
     def buy_taker(self, run_id: str, market_id: str, outcome: str, book: Book, usd: float, limit: float,
                   category: str | None = None, decision_id: int | None = None, now: float | None = None,
@@ -35,6 +41,7 @@ class PaperBroker:
         """Returns dollars spent (0 if nothing was available under the limit)."""
         now = now or time.time()
         fills = simulate_buy(book, usd, limit, self.fees.fn(category, market_rate=fee_rate), self.depth_haircut)
+        self._round_fee(fills)
         shares, avg, fee = summarize(fills)
         oid = self.ledger.add_order({"ts": now, "run_id": run_id, "mode": self.mode, "market_id": market_id,
                                      "token_id": book.token_id, "outcome": outcome, "side": "BUY", "limit_price": limit,
@@ -65,8 +72,9 @@ class PaperBroker:
     def _fill_resting(self, o, why: str, category_of=None, now: float | None = None) -> bool:
         """Fill one resting order in full at its own price (maker). False = cancelled for lack of cash."""
         price, shares = float(o["limit_price"]), float(o["shares"])
-        cat = category_of(o["market_id"]) if category_of else None
-        fee = self.fees.per_share(price, cat, maker=True) * shares
+        row = self.ledger.market(o["market_id"])
+        maker_rate = row["maker_fee_rate"] if row is not None and row["maker_fee_rate"] is not None else self.fees.maker_rate
+        fee = self.fees.order_fee(maker_rate * price * (1.0 - price) * shares)
         if price * shares + fee > self.ledger.cash() + 1e-6:
             self.cancel(o["id"], "not enough cash when the price came to it")
             return False
@@ -114,6 +122,7 @@ class PaperBroker:
         """Returns shares sold."""
         now = now or time.time()
         fills = simulate_sell(book, shares, limit, self.fees.fn(category, market_rate=fee_rate), self.depth_haircut)
+        self._round_fee(fills)
         sold, avg, fee = summarize(fills)
         oid = self.ledger.add_order({"ts": now, "run_id": run_id, "mode": self.mode, "market_id": market_id,
                                      "token_id": book.token_id, "outcome": outcome, "side": "SELL", "limit_price": limit,

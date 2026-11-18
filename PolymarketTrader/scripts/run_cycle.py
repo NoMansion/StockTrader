@@ -18,13 +18,15 @@ from src.config import load_config
 from src.forecast import make_backend
 from src.ledger import Ledger
 from src.trader import Trader
+from src.kalshi import Kalshi
 from src.venue import PolymarketUS, brief
 
 
 def scan(cfg, venue) -> int:
     st = universe.settings(cfg)
     cats = list(st["categories_allow"]) or None
-    listed = venue.list_markets(max_events=int(st["max_events_scanned"]), categories=cats)
+    listed = venue.list_markets(max_events=int(st["max_events_scanned"]), categories=cats,
+                                min_days=float(st["min_days_to_resolution"]), max_days=float(st["max_days_to_resolution"]))
     for m in listed:
         m.raw["lite"] = True
     keep, dropped = universe.choose(listed, cfg, {}, set())
@@ -44,6 +46,17 @@ def scan(cfg, venue) -> int:
     return 0
 
 
+def make_venue(cfg):
+    rt = cfg.get("runtime") or {}
+    name = str((cfg.get("account") or {}).get("venue", "kalshi")).lower()
+    pace = float(rt.get("venue_min_interval_s", 1.0))
+    if name == "kalshi":
+        return Kalshi(min_interval=pace, cache_dir=ROOT / "data")
+    if name == "polymarket_us":
+        return PolymarketUS(min_interval=pace)
+    raise ValueError(f"unknown account.venue {name!r} (kalshi or polymarket_us)")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=None)
@@ -60,7 +73,7 @@ def main() -> int:
         return 3
 
     rt = cfg.get("runtime") or {}
-    venue = PolymarketUS(min_interval=float(rt.get("venue_min_interval_s", 1.0)))
+    venue = make_venue(cfg)
     if args.scan:
         try:
             return scan(cfg, venue)
