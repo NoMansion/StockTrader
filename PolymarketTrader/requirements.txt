@@ -1,0 +1,8 @@
+# Exact versions on purpose. "Polymarket bot" packages are a favourite disguise for key-stealing malware:
+# install only these names, from PyPI, and never a third-party bot, skill or connector on a PC that holds keys.
+polymarket-us==2.4.1        # official SDK (github.com/Polymarket/polymarket-us-python); public market data needs no key
+PyYAML==6.0.3
+python-dotenv==1.2.3
+pytest==9.1.1
+# Only for forecaster.backend: "api" (not needed for the default Claude Code backend):
+# anthropic>=1.0

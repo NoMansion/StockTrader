@@ -1,0 +1,103 @@
+# PolymarketTrader configuration. Every number here is a starting point from the November 2026 research
+# (reports/), not a tuned result: nothing has been tested on live data yet. Change one thing at a time and let the
+# paper record say whether it helped.
+
+# ---- Account ------------------------------------------------------------------
+account:
+  # "paper" = simulated fills in data/pmt.db, no keys, no money. "live" is not implemented (docs/GO_LIVE.md).
+  mode: "paper"
+  venue: "polymarket_us"          # the CFTC-regulated US venue. The international site is closed to US residents.
+  paper_bankroll: 1000.0          # dollars the paper account starts with
+
+# ---- Which markets get a forecast (src/universe.py) ----------------------------
+universe:
+  min_days_to_resolution: 3       # nearer than this, prices are at their most accurate and news moves fastest
+  max_days_to_resolution: 45      # further than this, money is locked up too long for the edge on offer
+  min_liquidity: 2000
+  min_volume: 5000
+  max_spread: 0.04
+  price_range: [0.15, 0.85]       # no longshots, no near-certainties
+  min_touch_usd: 25
+  categories_allow: []            # empty = everything not denied below
+  # Sports: retail specialists are the least profitable group and the fee list keeps growing. Crypto: short-dated
+  # price markets are bot territory. Weather: a model-versus-model game, not a reading game (possible later
+  # module). Mentions / culture / entertainment: specialist or insider-prone.
+  categories_deny: [sports, esports, crypto, weather, mentions, culture, entertainment]
+  max_markets_per_event: 2
+  max_events_scanned: 300
+  max_candidates_per_cycle: 4     # forecasts per cycle; each is `forecaster.runs` Claude runs
+  reforecast_after_hours: 48
+
+# ---- Claude as the forecaster (src/forecast.py) --------------------------------
+forecaster:
+  # claude_code = the Claude Code CLI on this PC, headless, web tools only; uses the Claude subscription.
+  # api         = Anthropic API (ANTHROPIC_API_KEY in .env), billed per token: roughly $0.30-$0.60 a forecast,
+  #               which can exceed the expected profit of a $20 bet. Use only with a reason.
+  # file        = questions written to data/requests/, answers read from data/forecasts/ (a Claude session fills them).
+  backend: "claude_code"
+  model: "opus"                   # CLI alias; the API backend uses api_model
+  api_model: "claude-opus-5-5"
+  effort: "high"
+  runs: 3                         # independent runs per market; the median is used
+  max_run_spread: 0.15            # runs further apart than this make the forecast low-confidence (no trade)
+  timeout_s: 900
+  flags_block: true               # any flag raised by the forecaster blocks the trade
+
+# ---- Sizing (src/sizing.py) ------------------------------------------------------
+sizing:
+  shrink_weight: 0.3              # blended probability = market + 0.3 * (model - market). The market is the prior:
+                                  # the one result the research supports is that a SMALL model adjustment helps.
+  kelly_fraction: 0.25            # a quarter of full Kelly on the blended probability
+  min_edge: 0.03                  # blended probability minus all-in cost, i.e. about 10 points of raw disagreement
+  max_disagreement: 0.25          # a bigger gap than this is treated as our mistake, not the market's
+  min_price: 0.12
+  max_price: 0.88
+  max_position_pct: 0.02          # one market
+  max_event_pct: 0.04             # all markets of one event
+  max_category_pct: 0.20
+  max_total_exposure_pct: 0.40    # at least 60% stays in cash
+  min_order_usd: 5.0
+  max_order_usd: 50.0             # hard dollar ceiling per order whatever the equity
+
+# ---- Execution (src/broker.py) ---------------------------------------------------
+execution:
+  # passive = resting limit order one tick inside the bid, no fee, filled on paper only if the ask later comes
+  #           down to it. taker = lift the ask now and pay the fee. The research is consistent that makers earn
+  #           and takers pay on these venues, so passive is the default.
+  style: "passive"
+  tick: 0.01
+  resting_ttl_hours: 24
+  depth_haircut: 0.5              # taker fills assume only half of the displayed size is really there
+  exit_margin: 0.03               # sell when our probability is this far below the bid
+  reentry_cooldown_hours: 72      # after selling a market, stay out of it (both sides) this long
+  track_forecasts_days: 7         # keep recording prices of forecast markets this long (for scoring)
+
+# ---- Fees (src/fees.py): fee per share = rate * p * (1 - p), takers only ------------
+fees:
+  taker_rate: 0.095               # Polymarket US entry tier (under $10k of 30-day volume), Nov 2026: RE-CHECK
+  maker_rate: 0.0
+
+# ---- Safety limits (src/safety.py) ---------------------------------------------
+safety:
+  kill_switch: data/STOP          # create this file to stop everything; delete it to resume
+  max_equity_change: 0.20
+  max_drawdown: 0.15              # from the high-water mark: no new positions until reviewed
+  max_total_loss: 0.25            # of everything deposited: the experiment stops
+  max_orders_per_day: 6
+  max_deploy_per_day_pct: 0.10
+  max_forecast_age_hours: 6
+  max_book_age_seconds: 120
+  max_move_since_forecast: 0.04
+  max_spread: 0.04
+  min_hours_to_resolution: 48
+  max_order_usd: 50.0
+  max_order_pct: 0.03
+  require_rules_clear: true
+
+# ---- Being a good neighbour on the PC (src/runtime.py) ---------------------------
+runtime:
+  quiet_windows: ["17:15-18:20"]  # local time; the stock trader's daily job runs 17:30-18:05 Central
+  min_free_gb: 1.5                # do not start when the machine is short of memory
+  low_priority: true
+  venue_min_interval_s: 0.5       # seconds between requests to the exchange
+  lock_stale_hours: 3
