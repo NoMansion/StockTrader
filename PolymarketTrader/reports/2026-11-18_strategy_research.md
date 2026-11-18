@@ -402,7 +402,7 @@ Gaps are in percentage points. Busy: Economics and Politics, 1,105 events. Rando
   weak, the bot's own "busy" bar ($1,000 traded) is lower than the level tested here, and the correction
   should first be re-measured at that level and on more categories. It is on the list.
 
-### 3.11 Round r08: Economics at the lower volume level (5:55 pm CST)
+### 3.11 Round r08: Economics at the lower volume level (5:48 pm CST)
 
 **Data.** The Economics census is now complete down to 5,000 contracts: 5,289 markets in 1,397 events seen from
 the day they had traded 5,150 contracts (was 3,187 markets at 13,100). 2,761 rules: 26 pass, 52 leads, 51 lose.
