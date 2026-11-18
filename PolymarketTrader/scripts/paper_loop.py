@@ -35,6 +35,8 @@ def main() -> int:
             print(time.strftime("===== %Y-%m-%d %H:%M:%S UTC", time.gmtime()), flush=True)
             subprocess.run(cycle, cwd=str(ROOT))
             subprocess.run([sys.executable, str(ROOT / "scripts" / "export_forecasts.py")], cwd=str(ROOT))
+            # the mechanical rule under observation (no orders, its own file): see scripts/shadow_longshot.py
+            subprocess.run([sys.executable, str(ROOT / "scripts" / "shadow_longshot.py")], cwd=str(ROOT))
         time.sleep(args.poll)
 
 
