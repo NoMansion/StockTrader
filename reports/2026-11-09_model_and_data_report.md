@@ -689,7 +689,7 @@ Live model to beat: 1.408 stitched / 1.237 excess / 1.768 in 2000-2010 / 15.08% 
 - **Reading.** The new gates mostly lower volatility rather than raise returns: Sharpe goes up while CAGR stays flat or drops, and the gains come from the 2000s. The best cell clears the Sharpe bar by +0.071, and its 2000s, excess Sharpe, drawdown and worst year are all better. But its CAGR is 15.078% against 15.084%. That is flat, so it fails the "CAGR up" condition. Its 2010+ Sharpe is also lower (1.171 vs 1.190), and it trails the live model in strong years such as 2013 (+17.6% vs +30.9%) and 2023 (+7.1% vs +15.5%). It does not switch.
 - **Round 70 (confirmation, queued 8:30 am, 10 runs, about 2 hours).** It checks whether the best cell sits on a plateau or a lone peak. It moves each gate setting one step with the stock combo kept (put/call 5% and 20%, financial conditions -0.25), and splits the stock combo into its two parts (fresh 42 only; universe 3,000 + band 151 only). The decision rule was set before the results: switch only to a cell that passes every promote condition, CAGR strictly up included, and only if at least 4 of the 6 cells reach 1.438. Otherwise the sweep stops. Promoting it would also need live code for the two new gates in src/exposure.py, plus tests.
 
-### 8.23 Wednesday 2026-11-18, 12:15 pm: put/call gate and wider universe promoted (rounds 70-72); sweep finished
+### 8.23 Wednesday 2026-11-18, 11:05 am: put/call gate and wider universe promoted (rounds 70-72); sweep finished
 
 - **What changed (paper account, from tonight's 5:30 pm job).** The stock budget is also halved while the CBOE equity put/call ratio (20-day average) is in the lowest 5% of its trailing year: few puts bought means complacency. The universe widens to liquidity ranks 151-3,000 (was 201-2,500), and a name may be bought within 42 trading days of its last filing (was 21). Everything else is unchanged.
 
@@ -707,3 +707,20 @@ Live model to beat: 1.408 stitched / 1.237 excess / 1.768 in 2000-2010 / 15.08% 
 - **Round 72: NFCI left out.** Norgate's NFCI history changes every week, because the Chicago Fed re-estimates the whole index: 8,581 of 9,276 values differed between the sweep's cache and a fresh fetch, by up to 0.065, with sign flips in 1998, 2000 and 2007. So a backtest with the NFCI gate sees revised data, a mild look-ahead. Without it the leader scores 1.479 vs 1.486 with the same CAGR, drawdown and worst year, and 1.437 under measured costs. The gain was noise, so the simpler version went live. The NFCI code (`nfci_gt`, 7-trading-day lag) stays in src/exposure.py, tested but unused.
 - **Checks.** The exact replays of both versions matched with zero difference, and the lagged stock + sleeve budget peaked at 98%. The new src/exposure.py gates match the sweep's code on 26 years of real data: put/call 0 differing days, and NFCI differences only where the data was revised. pytest: 149 passed. The dry run passed every safety check: 11.3% stocks / 86.7% IEF+GLD / 2% cash (the sweep's last day: 13.6% stocks + cash), 45 stocks, 81 orders, stock turnover 25%.
 - **Sweep finished.** The follow-up rounds 63-72 found no further lead. The supervisor and workers are stopped. 870 parked runs stay parked.
+
+### 8.24 Wednesday 2026-11-18, 1:15 pm: edge checks (rounds 73-74), a bigger universe, lighter sweep memory
+
+Live model to beat: 1.479 flat / 1.437 under the measured cost-by-rank schedule. The bar is 1.509.
+
+- **Round 73 (edges of the new model).** Band from rank 101 1.488, 40 names 1.470, 50 names 1.455. All are within noise of the live settings, so nothing changes.
+- **$15k account.** Not a sweep test: the cost schedule charges by liquidity rank, not account size, so round 62's $15k run equalled its $100k control exactly. Instead, today's dry-run orders were sized down to $15k. No order falls under Alpaca's $1 minimum (median $38 vs $243). But whole shares cover only 37% of the traded money at $15k vs 89% at $97k, so about 63% would fill as fractional orders just after the open, not in the opening auction the backtest assumes. Measure that gap with reconcile_fills before going live small.
+- **Sweep memory.** A 3,000-stock run peaked at 13.2 GB. The cause was not the fundamentals tables (~0.2 GB each). It was the backtest's long feature table: 13 price columns for all 8,109 names (34 million rows), and then a join that copied it. The current ranker reads none of those columns. The sweep now keeps only their row index for such rankers, and adds the other columns by lookup instead of a join. Results are unchanged: both halves of the live model replay with zero difference, an older price-momentum model gives identical results before and after, and a synthetic test matches row for row. The peak fell to 7.5 GB at 3,000 stocks.
+- **Round 74 (bigger universe on the live model).** The names added past rank 3,000 have point-in-time earnings data on 62-70% of days, vs 72-81% in the top 3,000.
+
+  | Universe (band from 151) | Flat cost | Cost by rank | 2000-2010 | CAGR | Max DD |
+  |---|---|---|---|---|---|
+  | 3,000 (live) | 1.479 | 1.437 | 1.929 | 15.6% | -16.8% |
+  | 3,500 | 1.504 | 1.452 | 1.955 | 16.3% | -16.7% |
+  | 4,000 | 1.472 | 1.406 | 1.906 | 16.2% | -16.1% |
+
+- **Reading.** 3,500 is +0.025 flat and +0.015 under costs, inside the noise and under the bar. 4,000 is worse, mostly once costs count, because ranks above 3,000 pay the schedule's top bucket. The live 3,000 sits on a flat top. No change. The sweep is stopped again; the 4,000-stock runs ran one at a time with at least 1.6 GB of RAM free and no watchdog kills.
