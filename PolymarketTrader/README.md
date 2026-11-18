@@ -5,8 +5,10 @@ small bet. It runs on **paper only** for now, against live prices from Polymarke
 to US residents). No keys, no wallet and no money are involved until the paper record passes the gates in
 `docs/GO_LIVE.md`.
 
-Status, 2026-11-18: built and unit-tested (128 tests) in a cloud session that could not reach the exchange. **It
-has not yet run against real market data.** The first run on the PC is the first real test; see "Not yet verified".
+Status, 2026-11-18: built, unit-tested (149 tests) and run twice against the live exchange on a throwaway
+ledger: 5,548 markets scanned, four forecast by Claude, no trades (none of Claude's numbers was far enough from
+the market's). What that first contact showed is in `reports/2026-11-18_live_exchange_check.md`. The short
+version: the bot works, and **this exchange is very thin outside sports**, which makes the experiment slow.
 
 ## What the research says (and how the design follows)
 
@@ -35,9 +37,11 @@ venue.py      universe.py       forecast.py           sizing.py            safet
 1. **Mark.** Refresh prices for everything held or recently forecast. Settle resolved markets. Fill or expire
    resting paper orders.
 2. **Safety.** Kill switch, drawdown, total loss, daily budget.
-3. **Forecast.** Filter the exchange's open markets by rule. For the few that pass (4 per cycle by default), ask
-   Claude. Each market gets 3 independent runs with web search; the median is used. Runs that disagree by more
-   than 15 points, low confidence, unclear rules or any raised flag mean no trade.
+3. **Forecast.** Filter the exchange's open markets by rule, read the order books of the survivors, and ask
+   Claude about the best few (4 per cycle by default): markets already held first, then markets deep enough to
+   trade, then markets that only have a price worth scoring a forecast against. Each market gets 3 independent
+   runs with web search; the median is used. Runs that disagree by more than 15 points, low confidence, unclear
+   rules or any raised flag mean no trade.
 4. **Exits.** Sell a held position only if a fresh forecast has reversed the edge. No price stop-losses.
 5. **Entries.** Blended probability = market + 0.3 × (Claude − market). Trade only if that beats the price paid by
    3 points or more. Stake = a quarter of the Kelly fraction, capped at 2% of the account per market.
@@ -50,7 +54,9 @@ available to it: no shell, no files, no order code. Whatever a web page says to 
 
 | Rule | Setting | Where |
 |---|---|---|
-| Markets considered | 3 to 45 days from resolution, priced 15 to 85 cents, spread 4 cents or less, sports / crypto / weather / mentions / culture excluded | `universe` in `config.yaml` |
+| Markets forecast | macro, finance, technology, politics, geopolitics, science; 3 to 75 days from resolution; priced 15 to 85 cents; spread 4 cents or less; a two-sided book. Sports, crypto, culture, climate, "mention", award, military, personnel, merger and AI-model markets excluded | `universe` in `config.yaml` |
+| Markets traded | the above, and $1,000 or more traded so far, and $50 or more resting within 2 cents of the price | `universe.trade_min_*` |
+| Order size vs the book | at most 25% of what rests near the price | `execution.max_depth_share` |
 | Model weight | 0.3 toward Claude, 0.7 on the market price | `sizing.shrink_weight` |
 | Minimum edge | 3 points after blending (about 10 points of raw disagreement) | `sizing.min_edge` |
 | Disagreement ceiling | above 25 points, assume we are wrong: no trade | `sizing.max_disagreement` |
@@ -71,8 +77,8 @@ Run in PowerShell from the project folder.
 
 | Step | Command | What it shows |
 |---|---|---|
-| 1. Install, test, demo | `Set-ExecutionPolicy -Scope Process Bypass; .\setup.ps1` | 128 tests pass; a made-up month of trading prints a status report |
-| 2. Look at the real market list | `.venv\Scripts\python scripts\run_cycle.py --scan` | How many live markets pass the filters, and why the rest are dropped. Changes nothing, calls Claude zero times. **This is the first contact with the real exchange: expect surprises here.** |
+| 1. Install, test, demo | `Set-ExecutionPolicy -Scope Process Bypass; .\setup.ps1` | 149 tests pass; a made-up month of trading prints a status report |
+| 2. Look at the real market list | `.venv\Scripts\python scripts\run_cycle.py --scan` | How many live markets pass the filters, and why the rest are dropped. Changes nothing, calls Claude zero times, takes under a minute |
 | 3. One real paper cycle | `.venv\Scripts\python scripts\run_cycle.py` | Up to 4 markets forecast by Claude (several minutes), any paper orders placed |
 | 4. Status | `.venv\Scripts\python scripts\status.py` | Account, positions, forecast scoring, go-live gates |
 
@@ -96,11 +102,15 @@ Like the stock trader's task, it runs only while the user is logged in. A missed
 apart, and one Claude process at a time. It runs at below-normal priority, will not start with under 1.5 GB of
 memory free, and a lock file stops two cycles overlapping. It holds no data in memory between cycles.
 
-**What it costs in Claude usage.** With the defaults, at most 4 markets × 3 runs × 3 cycles = 36 research runs a
-day against the Claude subscription, about a minute each. Lower `forecaster.runs` or
-`universe.max_candidates_per_cycle` if that crowds out other work. The `api` backend does the same on a paid API
-key at roughly $0.30 to $0.60 a forecast, which is more than a $20 bet with a 4-point edge is expected to earn:
-use it only with a reason.
+**What it costs in Claude usage.** Measured on the live trial: about 100 seconds per research run at medium
+effort, and $0.13 to $0.30 of usage per run at list prices. With the defaults that is at most 4 markets × 3 runs
+× 3 cycles = 36 runs a day against the Claude subscription, about 20 to 30 minutes per cycle. Lower
+`forecaster.runs` or `universe.max_candidates_per_cycle` if that crowds out other work. The `api` backend does
+the same on a paid API key, at a cost per forecast that is more than a $20 bet with a 4-point edge is expected
+to earn: use it only with a reason.
+
+**What it costs the exchange.** About 60 to 120 small requests per cycle, one a second, with a back-off when the
+gateway says to slow down (it does: bursts get an HTTP 429).
 
 ## Reading the results
 
@@ -117,29 +127,31 @@ price moves against them, and an order left resting in a market that closes agai
 positions are valued at the bid), but one published comparison of the same strategy on
 the same venue showed +49.8% on paper and +5.9% for real.
 
-## Not yet verified
+## What is and is not verified
 
-Everything about the exchange was read from the official `polymarket-us` 2.4.1 SDK source, not observed on the
-wire. The first `--scan` on the PC will show which of these need a fix:
+Checked against the live public API on 2026-11-18 (details and counts in the live-check report; real payloads
+are in `tests/fixtures/`): the market, event and order-book fields; that the settlement value is the YES payout
+and that an unsettled market answers "not found"; the 0.095 fee coefficient, per-market tick sizes and minimum
+quantities; the category names; server-side category filtering; the gateway's rate limiting. The Claude Code
+forecaster ran end to end on real questions.
 
-- **Field names** for a market's end date, rules text and category beyond the ones the SDK declares
-  (`src/venue.py` tries several spellings and treats a missing end date or rules text as "do not trade").
-- **Category labels** the exchange actually uses, which the deny list in `config.yaml` must match. A market with
-  no category or tags at all is not traded, so if the scan drops everything for "no category or tags", the field
-  mapping in `src/venue.py` is the thing to fix.
-- **Settlement**: what the settlement endpoint returns before a market has settled. The bot only settles a market
-  the exchange reports as closed, and only at a payout of exactly 0, 0.5 or 1.
-- **Fees, tick size, minimum order size**: `fees.taker_rate` (0.095) and `execution.tick` (0.01) come from
-  secondary sources dated November 2026 and the fee schedule was changing that month.
+Not verified:
+
+- **Anything that needs an account**: placing orders, how a NO order's price is expressed, post-only behaviour,
+  the fee actually charged. That is why real money is a stub (`docs/GO_LIVE.md`).
 - **State eligibility**: sources conflict on which states Polymarket US accepts (Illinois is one of the disputed
   ones). Only the app's own sign-up check settles it. Kalshi is the fallback venue; an adapter for it is not written.
+- **How often a resting order would really fill** in markets this quiet.
+- **Windows**: built and tested on Linux. The Windows-specific parts (the hidden launcher, `setup.ps1`, killing a
+  hung `claude` process tree, low priority and memory checks) follow the stock trader's patterns but have not
+  run on the PC yet.
 - Most figures in the research report came from search summaries, because the research session could not open
   the primary pages. The report's last table lists what to re-check before real money.
 
-Differences from the report's recommended design, on purpose or not yet done: 3 forecast runs instead of 5 to 10
-(usage cost); no allow-list of web sources (the Claude Code web search cannot be restricted that way; the run
-spread check, the flags and the caps stand in for it); no recalibration of Claude's probabilities yet (needs 100+
-of its own resolved forecasts first); no second paper venue.
+Differences from the research report's recommended design, on purpose or not yet done: 3 forecast runs instead
+of 5 to 10 (usage cost); no allow-list of web sources (the Claude Code web search cannot be restricted that way;
+the run-spread check, the flags and the caps stand in for it); no recalibration of Claude's probabilities yet
+(needs 100+ of its own resolved forecasts first); no second paper venue.
 
 ## Layout
 
@@ -157,8 +169,8 @@ src/scoring.py        Brier vs market, price movement, P&L, go-live gates
 src/trader.py         the cycle
 src/runtime.py        lock, quiet hours, priority, memory check
 scripts/              run_cycle.py, status.py, demo_offline.py
-tests/                128 tests, all offline
-reports/              the research report
+tests/                149 tests, all offline; tests/fixtures holds real exchange payloads
+reports/              the research report, and what the first live run showed
 research_notes/       the six sets of notes behind it
 docs/GO_LIVE.md       what has to be true before real money, and how to do it then
 ```

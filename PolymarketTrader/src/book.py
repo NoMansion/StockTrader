@@ -23,6 +23,8 @@ class Book:
     ts: float = 0.0                                                 # epoch seconds of the snapshot
     tick: float = 0.01
     min_size: float = 0.0                                           # venue minimum order, in shares
+    volume_usd: float | None = None                                 # dollars traded in this market so far
+    open_interest: float | None = None                              # contracts outstanding
 
     @classmethod
     def from_levels(cls, token_id: str, bids, asks, ts: float = 0.0, tick: float = 0.01, min_size: float = 0.0) -> "Book":
@@ -57,6 +59,15 @@ class Book:
         if self.bids and self.asks:
             return self.asks[0][0] - self.bids[0][0]
         return None
+
+    def near_touch_usd(self, band: float = 0.02) -> float:
+        """Dollars resting within `band` of the best price, on the thinner of the two sides. The very best level
+        is often one or two contracts; what matters is what sits just behind it."""
+        if not self.bids or not self.asks:
+            return 0.0
+        bid = sum(p * s for p, s in self.bids if p >= self.bids[0][0] - band - 1e-9)
+        ask = sum(p * s for p, s in self.asks if p <= self.asks[0][0] + band + 1e-9)
+        return min(bid, ask)
 
     def depth_usd(self, side: str, limit: float) -> float:
         """Dollars available on the asks at or below `limit` (side="buy") or on the bids at or above it ("sell")."""

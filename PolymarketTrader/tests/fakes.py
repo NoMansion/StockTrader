@@ -21,7 +21,9 @@ RULES = ("This market resolves to Yes if the Bureau of Labor Statistics reports 
 
 
 class FakeExchange:
-    """client.events.list / retrieve_by_slug, client.markets.retrieve_by_slug / book / settlement."""
+    """client.events.list / retrieve_by_slug, client.markets.retrieve_by_slug / book / settlement, answering in
+    the shape the live API used on 2026-11-18 (see tests/fixtures): no liquidity figure in listings, quotes and
+    tick size on the market, traded dollars in the book's statistics, no event slug on the market detail."""
 
     def __init__(self, now: float):
         self.now = now
@@ -32,32 +34,43 @@ class FakeExchange:
         self.events = self._Events(self)
         self.markets = self._Markets(self)
 
-    def add(self, slug: str, title: str = None, event: str = None, category: str = "economics", days: float = 20,
-            bid: float = 0.48, ask: float = 0.50, size: float = 500, liquidity: float = 20000, volume: float = 80000,
-            rules: str = RULES):
+    def add(self, slug: str, title: str = None, event: str = None, category: str = "macro", days: float = 20,
+            bid: float = 0.48, ask: float = 0.50, size: float = 500, volume: float = 80000, rules: str = RULES,
+            tick: float = 0.01, fee: float = 0.095, min_qty: float = 0.01):
         event = event or f"ev-{slug}"
-        ev = self._events.setdefault(event, {"id": len(self._events) + 1, "slug": event, "title": f"Event {event}",
-                                              "description": "", "endTime": iso(self.now + days * 86400), "active": True,
-                                              "closed": False, "tags": [{"id": 1, "slug": category, "label": category}],
+        ev = self._events.setdefault(event, {"id": str(len(self._events) + 1), "slug": event, "title": f"Event {event}",
+                                              "description": "", "category": category,
+                                              "endDate": iso(self.now + days * 86400), "active": True, "closed": False,
+                                              "insiderTradingRules": None,
+                                              "tags": [{"id": "1", "slug": category, "label": category.title()}],
                                               "markets": []})
-        ev["markets"].append({"id": len(ev["markets"]) + 1, "slug": slug, "title": title or f"Will {slug} happen?",
-                              "outcome": "Yes", "active": True, "closed": False, "liquidity": liquidity, "volume": volume,
-                              "description": rules, "eventSlug": event})
+        ev["markets"].append({"id": str(len(ev["markets"]) + 1), "slug": slug, "title": title or f"Will {slug} happen?",
+                              "question": ev["title"], "description": rules, "category": category,
+                              "endDate": iso(self.now + days * 86400), "active": True, "closed": False,
+                              "status": "MARKET_STATUS_OPEN", "orderPriceMinTickSize": tick, "minimumTradeQty": min_qty,
+                              "feeCoefficient": fee, "tags": [],
+                              "marketSides": [{"description": "Yes", "long": True}, {"description": "No", "long": False}]})
+        self._volume = getattr(self, "_volume", {})
+        self._volume[slug] = volume
         self.set_book(slug, bid, ask, size)
         return self
 
     def set_book(self, slug: str, bid: float, ask: float, size: float = 500, state: str = "MARKET_STATE_OPEN"):
         def lv(p, q):
-            return {"px": {"value": f"{p:.2f}", "currency": "USD"}, "qty": str(q)}
+            return {"px": {"value": f"{p:.4f}", "currency": "USD"}, "qty": f"{q:.4f}"}
+        m, _ = self._market(slug)
+        tick = m["orderPriceMinTickSize"]
+        m["bestBidQuote"] = {"value": f"{bid:.4f}", "currency": "USD"}
+        m["bestAskQuote"] = {"value": f"{ask:.4f}", "currency": "USD"}
         self._books[slug] = {"marketData": {"marketSlug": slug, "state": state,
-                                            "bids": [lv(bid, size), lv(bid - 0.01, size * 2)],
-                                            "offers": [lv(ask, size), lv(ask + 0.01, size * 2)]}}
+                                            "bids": [lv(bid, size), lv(bid - tick, size * 2)],
+                                            "offers": [lv(ask, size), lv(ask + tick, size * 2)],
+                                            "stats": {"notionalTraded": {"value": str(self._volume[slug]), "currency": "USD"},
+                                                      "openInterest": "5000.0000"}}}
 
     def close(self, slug: str, settlement: float | None = None):
-        for ev in self._events.values():
-            for m in ev["markets"]:
-                if m["slug"] == slug:
-                    m["closed"], m["active"] = True, False
+        m, _ = self._market(slug)
+        m["closed"], m["active"], m["status"] = True, False, "MARKET_STATUS_RESOLVED"
         if settlement is not None:
             self._settled[slug] = settlement
 
@@ -75,7 +88,8 @@ class FakeExchange:
         def list(self, params=None):
             self.ex.calls.append("events.list")
             p = params or {}
-            evs = [e for e in self.ex._events.values()]
+            evs = [e for e in self.ex._events.values()
+                   if not p.get("categories") or e["category"] in p["categories"]]
             off, lim = int(p.get("offset", 0)), int(p.get("limit", 50))
             return {"events": evs[off:off + lim]}
 
@@ -89,7 +103,7 @@ class FakeExchange:
 
         def retrieve_by_slug(self, slug):
             self.ex.calls.append(f"markets.retrieve_by_slug:{slug}")
-            return {"market": self.ex._market(slug)[0]}
+            return {"market": dict(self.ex._market(slug)[0])}
 
         def book(self, slug):
             self.ex.calls.append(f"markets.book:{slug}")

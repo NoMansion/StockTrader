@@ -1,0 +1,526 @@
+{
+ "captured": "2026-11-18",
+ "source": "gateway.polymarket.us public endpoints",
+ "event": {
+  "id": "165138",
+  "ticker": "uscpi-october-yoy-2026-11-10",
+  "slug": "uscpi-october-yoy-2026-11-10",
+  "title": "CPI YoY in October",
+  "description": "CPI YoY in October",
+  "startDate": "2026-11-10T13:30:00Z",
+  "endDate": "2026-11-11T04:59:00Z",
+  "active": true,
+  "closed": false,
+  "archived": false,
+  "category": "macro",
+  "createdAt": "2026-10-16T21:00:40Z",
+  "updatedAt": "2026-11-18T06:56:35Z",
+  "startTime": "2026-11-10T13:30:00Z",
+  "period": "NS",
+  "markets": [
+   {
+    "id": "1499291",
+    "question": "CPI YoY in October",
+    "slug": "cpic-uscpi-october-yoy-2026-11-10-gt3pt2pct",
+    "endDate": "2027-02-11T04:59:00Z",
+    "category": "macro",
+    "startDate": "2026-10-16T21:01:28Z",
+    "description": "This market will settle to Yes if U.S. inflation, before seasonal adjustment, over the 12-month period ending in October 2026 (CPI YoY) is above 3.2%. Outcome sourced from BLS. \n\nSettlement is based on the Consumer Price Index release published by the Bureau of Labor Statistics (BLS), currently scheduled for release on November 10, 2026. Any subsequent revisions to this figure will not be considered for settlement purposes.\n\nIf the BLS does not publish CPI YoY for October 2026 on the Consumer Price Index scheduled release date, the first figure officially published by BLS for CPI YoY in October 2026 will be used for settlement. If no qualifying figure is published within three months of the scheduled release date, this market will resolve based on data from the most recent previous month with available data.\n\nFor full rules, see: https://polymarketexchange.com/files/product-terms/CPIC.pdf",
+    "active": true,
+    "marketType": "futures",
+    "closed": false,
+    "createdAt": "2026-10-16T21:01:28Z",
+    "updatedAt": "2026-11-18T02:28:44Z",
+    "archived": false,
+    "orderPriceMinTickSize": 0.01,
+    "gameStartTime": "2026-11-10T13:30:00Z",
+    "manualActivation": false,
+    "sportsMarketType": "futures",
+    "marketSides": [
+     {
+      "id": "2998060",
+      "marketSideType": "MARKET_SIDE_TYPE_INSTRUMENT",
+      "identifier": "cpic-uscpi-october-yoy-2026-11-10-gt3pt2pct",
+      "createdAt": "2026-10-16T21:01:28Z",
+      "updatedAt": "2026-10-16T21:01:28Z",
+      "description": "Yes",
+      "price": "0.9800",
+      "marketId": 1499291,
+      "long": true,
+      "quote": {
+       "value": "0.9900",
+       "currency": "USD"
+      },
+      "tradable": true
+     },
+     {
+      "id": "2998061",
+      "marketSideType": "MARKET_SIDE_TYPE_INSTRUMENT",
+      "identifier": "cpic-uscpi-october-yoy-2026-11-10-gt3pt2pct",
+      "createdAt": "2026-10-16T21:01:28Z",
+      "updatedAt": "2026-10-16T21:01:28Z",
+      "description": "No",
+      "price": "0.9900",
+      "marketId": 1499291,
+      "long": false,
+      "quote": {
+       "value": "0.02",
+       "currency": "USD"
+      },
+      "tradable": true
+     }
+    ],
+    "outcomes": "[\"Yes\",\"No\"]",
+    "outcomePrices": "[\"0.9800\",\"0.9900\"]",
+    "ep3Status": "OPEN",
+    "status": "MARKET_STATUS_OPEN",
+    "assetPriceTerms": null,
+    "sportsMarketTypeV2": "SPORTS_MARKET_TYPE_FUTURE",
+    "hidden": false,
+    "tags": [],
+    "title": "Above 3.2%",
+    "feeCoefficient": 0.095,
+    "sortOrder": 1,
+    "bestBidQuote": {
+     "value": "0.9800",
+     "currency": "USD"
+    },
+    "bestAskQuote": {
+     "value": "0.9900",
+     "currency": "USD"
+    },
+    "titleShort": "Above 3.2%",
+    "ep3SyncedAt": "2026-11-12T19:55:52Z",
+    "minimumTradeQty": 0.01,
+    "comboEnabled": false,
+    "politics": null,
+    "eventSubcategory": "INFLATION",
+    "singlesRfqConfig": {
+     "enabled": false,
+     "midpointDeviation": 0,
+     "minOrderValueUsd": 0,
+     "maxQuoteAgeSeconds": 0,
+     "quoteWindows": [],
+     "ruleName": "default",
+     "version": "singles-half-markets-v2"
+    }
+   },
+   {
+    "id": "1499284",
+    "question": "CPI YoY in October",
+    "slug": "cpic-uscpi-october-yoy-2026-11-10-gt3pt6pct",
+    "endDate": "2027-02-11T04:59:00Z",
+    "category": "macro",
+    "startDate": "2026-10-16T21:01:11Z",
+    "description": "This market will settle to Yes if U.S. inflation, before seasonal adjustment, over the 12-month period ending in October 2026 (CPI YoY) is above 3.6%. Outcome sourced from BLS. \n\nSettlement is based on the Consumer Price Index release published by the Bureau of Labor Statistics (BLS), currently scheduled for release on November 10, 2026. Any subsequent revisions to this figure will not be considered for settlement purposes.\n\nIf the BLS does not publish CPI YoY for October 2026 on the Consumer Price Index scheduled release date, the first figure officially published by BLS for CPI YoY in October 2026 will be used for settlement. If no qualifying figure is published within three months of the scheduled release date, this market will resolve based on data from the most recent previous month with available data.\n\nFor full rules, see: https://polymarketexchange.com/files/product-terms/CPIC.pdf",
+    "active": true,
+    "marketType": "futures",
+    "closed": false,
+    "createdAt": "2026-10-16T21:01:11Z",
+    "updatedAt": "2026-11-18T06:56:35Z",
+    "archived": false,
+    "orderPriceMinTickSize": 0.01,
+    "gameStartTime": "2026-11-10T13:30:00Z",
+    "manualActivation": false,
+    "sportsMarketType": "futures",
+    "marketSides": [
+     {
+      "id": "2998046",
+      "marketSideType": "MARKET_SIDE_TYPE_INSTRUMENT",
+      "identifier": "cpic-uscpi-october-yoy-2026-11-10-gt3pt6pct",
+      "createdAt": "2026-10-16T21:01:11Z",
+      "updatedAt": "2026-10-16T21:01:11Z",
+      "description": "Yes",
+      "price": "0.9800",
+      "marketId": 1499284,
+      "long": true,
+      "quote": {
+       "value": "0.9900",
+       "currency": "USD"
+      },
+      "tradable": true
+     },
+     {
+      "id": "2998047",
+      "marketSideType": "MARKET_SIDE_TYPE_INSTRUMENT",
+      "identifier": "cpic-uscpi-october-yoy-2026-11-10-gt3pt6pct",
+      "createdAt": "2026-10-16T21:01:11Z",
+      "updatedAt": "2026-10-16T21:01:11Z",
+      "description": "No",
+      "price": "0.9900",
+      "marketId": 1499284,
+      "long": false,
+      "quote": {
+       "value": "0.02",
+       "currency": "USD"
+      },
+      "tradable": true
+     }
+    ],
+    "outcomes": "[\"Yes\",\"No\"]",
+    "outcomePrices": "[\"0.9800\",\"0.9900\"]",
+    "ep3Status": "OPEN",
+    "status": "MARKET_STATUS_OPEN",
+    "assetPriceTerms": null,
+    "sportsMarketTypeV2": "SPORTS_MARKET_TYPE_FUTURE",
+    "hidden": false,
+    "tags": [],
+    "title": "Above 3.6%",
+    "feeCoefficient": 0.095,
+    "sortOrder": 5,
+    "bestBidQuote": {
+     "value": "0.9800",
+     "currency": "USD"
+    },
+    "bestAskQuote": {
+     "value": "0.9900",
+     "currency": "USD"
+    },
+    "titleShort": "Above 3.6%",
+    "ep3SyncedAt": "2026-11-12T19:55:52Z",
+    "minimumTradeQty": 0.01,
+    "comboEnabled": false,
+    "politics": null,
+    "eventSubcategory": "INFLATION",
+    "singlesRfqConfig": {
+     "enabled": false,
+     "midpointDeviation": 0,
+     "minOrderValueUsd": 0,
+     "maxQuoteAgeSeconds": 0,
+     "quoteWindows": [],
+     "ruleName": "default",
+     "version": "singles-half-markets-v2"
+    }
+   },
+   {
+    "id": "1499282",
+    "question": "CPI YoY in October",
+    "slug": "cpic-uscpi-october-yoy-2026-11-10-gt3pt7pct",
+    "endDate": "2027-02-11T04:59:00Z",
+    "category": "macro",
+    "startDate": "2026-10-16T21:01:06Z",
+    "description": "This market will settle to Yes if U.S. inflation, before seasonal adjustment, over the 12-month period ending in October 2026 (CPI YoY) is above 3.7%. Outcome sourced from BLS. \n\nSettlement is based on the Consumer Price Index release published by the Bureau of Labor Statistics (BLS), currently scheduled for release on November 10, 2026. Any subsequent revisions to this figure will not be considered for settlement purposes.\n\nIf the BLS does not publish CPI YoY for October 2026 on the Consumer Price Index scheduled release date, the first figure officially published by BLS for CPI YoY in October 2026 will be used for settlement. If no qualifying figure is published within three months of the scheduled release date, this market will resolve based on data from the most recent previous month with available data.\n\nFor full rules, see: https://polymarketexchange.com/files/product-terms/CPIC.pdf",
+    "active": true,
+    "marketType": "futures",
+    "closed": false,
+    "createdAt": "2026-10-16T21:01:07Z",
+    "updatedAt": "2026-11-17T22:26:58Z",
+    "archived": false,
+    "orderPriceMinTickSize": 0.01,
+    "gameStartTime": "2026-11-10T13:30:00Z",
+    "manualActivation": false,
+    "sportsMarketType": "futures",
+    "marketSides": [
+     {
+      "id": "2998042",
+      "marketSideType": "MARKET_SIDE_TYPE_INSTRUMENT",
+      "identifier": "cpic-uscpi-october-yoy-2026-11-10-gt3pt7pct",
+      "createdAt": "2026-10-16T21:01:07Z",
+      "updatedAt": "2026-10-16T21:01:07Z",
+      "description": "Yes",
+      "price": "0.0100",
+      "marketId": 1499282,
+      "long": true,
+      "quote": {
+       "value": "0.1900",
+       "currency": "USD"
+      },
+      "tradable": true
+     },
+     {
+      "id": "2998043",
+      "marketSideType": "MARKET_SIDE_TYPE_INSTRUMENT",
+      "identifier": "cpic-uscpi-october-yoy-2026-11-10-gt3pt7pct",
+      "createdAt": "2026-10-16T21:01:07Z",
+      "updatedAt": "2026-10-16T21:01:07Z",
+      "description": "No",
+      "price": "0.1900",
+      "marketId": 1499282,
+      "long": false,
+      "quote": {
+       "value": "0.99",
+       "currency": "USD"
+      },
+      "tradable": true
+     }
+    ],
+    "outcomes": "[\"Yes\",\"No\"]",
+    "outcomePrices": "[\"0.0100\",\"0.1900\"]",
+    "ep3Status": "OPEN",
+    "status": "MARKET_STATUS_OPEN",
+    "assetPriceTerms": null,
+    "sportsMarketTypeV2": "SPORTS_MARKET_TYPE_FUTURE",
+    "hidden": false,
+    "tags": [],
+    "title": "Above 3.7%",
+    "feeCoefficient": 0.095,
+    "sortOrder": 6,
+    "bestBidQuote": {
+     "value": "0.0100",
+     "currency": "USD"
+    },
+    "bestAskQuote": {
+     "value": "0.1900",
+     "currency": "USD"
+    },
+    "titleShort": "Above 3.7%",
+    "ep3SyncedAt": "2026-11-12T19:55:52Z",
+    "minimumTradeQty": 0.01,
+    "comboEnabled": false,
+    "politics": null,
+    "eventSubcategory": "INFLATION",
+    "singlesRfqConfig": {
+     "enabled": false,
+     "midpointDeviation": 0,
+     "minOrderValueUsd": 0,
+     "maxQuoteAgeSeconds": 0,
+     "quoteWindows": [],
+     "ruleName": "default",
+     "version": "singles-half-markets-v2"
+    }
+   }
+  ],
+  "participants": [],
+  "hidden": false,
+  "tags": [
+   {
+    "id": "32",
+    "label": "Econ",
+    "slug": "economics",
+    "updatedAt": "2026-11-18T10:56:50Z",
+    "tradable": false,
+    "subtags": [],
+    "hub": null,
+    "featuredEventIds": []
+   },
+   {
+    "id": "34",
+    "label": "CPI",
+    "slug": "cpi",
+    "updatedAt": "2026-11-18T10:25:54Z",
+    "tradable": false,
+    "subtags": [],
+    "hub": null,
+    "featuredEventIds": []
+   },
+   {
+    "id": "932",
+    "label": "US Econ",
+    "slug": "us-econ",
+    "updatedAt": "2026-11-18T10:56:50Z",
+    "tradable": false,
+    "subtags": [],
+    "hub": null,
+    "featuredEventIds": []
+   }
+  ],
+  "teams": [],
+  "sortType": "manual",
+  "marketGroups": [],
+  "streamProvider": "",
+  "streamRequiresAuth": false,
+  "combos": {
+   "enabled": false,
+   "numMarkets": 0,
+   "numSpreadsAndTotalsMarkets": 0
+  },
+  "marketCounts": {
+   "numMarkets": 12,
+   "numSpreadsAndTotalsMarkets": 0
+  },
+  "fixtureId": "",
+  "insiderTradingRules": null,
+  "payoutEstimateMessage": "",
+  "payoutEstimateTime": ""
+ },
+ "market_detail": {
+  "market": {
+   "id": "1499284",
+   "question": "CPI YoY in October",
+   "slug": "cpic-uscpi-october-yoy-2026-11-10-gt3pt6pct",
+   "endDate": "2027-02-11T04:59:00Z",
+   "category": "macro",
+   "startDate": "2026-10-16T21:01:11Z",
+   "description": "This market will settle to Yes if U.S. inflation, before seasonal adjustment, over the 12-month period ending in October 2026 (CPI YoY) is above 3.6%. Outcome sourced from BLS. \n\nSettlement is based on the Consumer Price Index release published by the Bureau of Labor Statistics (BLS), currently scheduled for release on November 10, 2026. Any subsequent revisions to this figure will not be considered for settlement purposes.\n\nIf the BLS does not publish CPI YoY for October 2026 on the Consumer Price Index scheduled release date, the first figure officially published by BLS for CPI YoY in October 2026 will be used for settlement. If no qualifying figure is published within three months of the scheduled release date, this market will resolve based on data from the most recent previous month with available data.\n\nFor full rules, see: https://polymarketexchange.com/files/product-terms/CPIC.pdf",
+   "active": true,
+   "marketType": "futures",
+   "closed": false,
+   "createdAt": "2026-10-16T21:01:11Z",
+   "updatedAt": "2026-11-18T06:56:35Z",
+   "archived": false,
+   "orderPriceMinTickSize": 0.01,
+   "gameStartTime": "2026-11-10T13:30:00Z",
+   "manualActivation": false,
+   "sportsMarketType": "futures",
+   "marketSides": [
+    {
+     "id": "2998046",
+     "marketSideType": "MARKET_SIDE_TYPE_INSTRUMENT",
+     "identifier": "cpic-uscpi-october-yoy-2026-11-10-gt3pt6pct",
+     "createdAt": "2026-10-16T21:01:11Z",
+     "updatedAt": "2026-10-16T21:01:11Z",
+     "description": "Yes",
+     "price": "0.9900",
+     "marketId": 1499284,
+     "long": true,
+     "quote": {
+      "value": "0.9900",
+      "currency": "USD"
+     },
+     "tradable": true
+    },
+    {
+     "id": "2998047",
+     "marketSideType": "MARKET_SIDE_TYPE_INSTRUMENT",
+     "identifier": "cpic-uscpi-october-yoy-2026-11-10-gt3pt6pct",
+     "createdAt": "2026-10-16T21:01:11Z",
+     "updatedAt": "2026-10-16T21:01:11Z",
+     "description": "No",
+     "price": "0.02",
+     "marketId": 1499284,
+     "long": false,
+     "quote": {
+      "value": "0.02",
+      "currency": "USD"
+     },
+     "tradable": true
+    }
+   ],
+   "outcomes": "[\"Yes\",\"No\"]",
+   "outcomePrices": "[\"0.9900\",\"0.02\"]",
+   "ep3Status": "OPEN",
+   "status": "MARKET_STATUS_OPEN",
+   "assetPriceTerms": null,
+   "sportsMarketTypeV2": "SPORTS_MARKET_TYPE_FUTURE",
+   "hidden": false,
+   "tags": [],
+   "title": "Above 3.6%",
+   "feeCoefficient": 0.095,
+   "sortOrder": 5,
+   "bestBidQuote": {
+    "value": "0.9800",
+    "currency": "USD"
+   },
+   "bestAskQuote": {
+    "value": "0.9900",
+    "currency": "USD"
+   },
+   "titleShort": "Above 3.6%",
+   "ep3SyncedAt": "2026-11-12T19:55:52Z",
+   "minimumTradeQty": 0.01,
+   "comboEnabled": false,
+   "politics": null,
+   "eventSubcategory": "INFLATION",
+   "singlesRfqConfig": {
+    "enabled": false,
+    "midpointDeviation": 0,
+    "minOrderValueUsd": 0,
+    "maxQuoteAgeSeconds": 0,
+    "quoteWindows": [],
+    "ruleName": "default",
+    "version": "singles-half-markets-v2"
+   }
+  }
+ },
+ "book": {
+  "marketData": {
+   "marketSlug": "cpic-uscpi-october-yoy-2026-11-10-gt3pt6pct",
+   "bids": [
+    {
+     "px": {
+      "value": "0.9800",
+      "currency": "USD"
+     },
+     "qty": "9005.7600"
+    },
+    {
+     "px": {
+      "value": "0.9700",
+      "currency": "USD"
+     },
+     "qty": "0.0100"
+    },
+    {
+     "px": {
+      "value": "0.2200",
+      "currency": "USD"
+     },
+     "qty": "5555.0000"
+    },
+    {
+     "px": {
+      "value": "0.0100",
+      "currency": "USD"
+     },
+     "qty": "1.0000"
+    }
+   ],
+   "offers": [
+    {
+     "px": {
+      "value": "0.9900",
+      "currency": "USD"
+     },
+     "qty": "75.8400"
+    }
+   ],
+   "state": "MARKET_STATE_OPEN",
+   "stats": {
+    "openPx": {
+     "value": "0.2500",
+     "currency": "USD"
+    },
+    "lowPx": {
+     "value": "0.2500",
+     "currency": "USD"
+    },
+    "highPx": {
+     "value": "0.9900",
+     "currency": "USD"
+    },
+    "lastTradePx": {
+     "value": "0.9800",
+     "currency": "USD"
+    },
+    "sharesTraded": "10841.0900",
+    "notionalTraded": {
+     "value": "8121.3889",
+     "currency": "USD"
+    },
+    "lastTradeQty": "4.3300",
+    "openInterest": "752.3300",
+    "openSetTime": "2026-10-17T01:33:44.504395922Z",
+    "highSetTime": "2026-10-19T00:11:50.981414433Z",
+    "lowSetTime": "2026-10-17T01:33:44.504395922Z",
+    "lastTradeSetTime": "2026-11-16T12:02:51.938863989Z",
+    "openInterestSetTime": "2026-11-16T12:02:52.088603738Z",
+    "notionalSetTime": "2026-11-16T12:02:51.938863989Z",
+    "currentPx": {
+     "value": "0.9850",
+     "currency": "USD"
+    },
+    "lastPriceSample": {
+     "longPx": {
+      "value": "0.9800",
+      "currency": "USD"
+     },
+     "shortPx": {
+      "value": "0.02",
+      "currency": "USD"
+     },
+     "ts": "2026-11-18T10:54:49.747960529Z"
+    }
+   },
+   "transactTime": "2026-11-18T10:54:49.747960529Z"
+  }
+ },
+ "settlement_open_market": {
+  "error": "NotFoundError",
+  "status_code": 404,
+  "message": "Settlement not found for market cpic-uscpi-october-yoy-2026-11-10-gt3pt6pct"
+ },
+ "settlement_settled_market": {
+  "slug": "cpic-uscpi-apr2026yoy-2026-05-12-2pt9pct",
+  "settlement": 0
+ }
+}

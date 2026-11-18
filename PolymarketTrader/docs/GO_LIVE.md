@@ -20,18 +20,25 @@ first forecast so the bar cannot drift once results start coming in.
 All six are required. Also required, and not automated: four straight weeks with no unexplained cycle errors, and
 no held market resolved in a way the forecaster's rules summary did not anticipate.
 
-If the gates are not met after four months, the answer is that the edge is not there. Stop, and keep the log.
+These gates were set before the exchange had been seen. The first live scan (2026-11-18) found only about 30
+forecastable non-sports markets at a time, so 150 resolved events is most of a year on this venue alone. The
+gates stay as they are: the honest options are to wait, or to add a second venue with deeper books (Kalshi), not
+to lower the bar. If the evidence after 100 resolved events points clearly the wrong way (the model measurably
+worse than the price), stop early and keep the log.
 
 ## 2. The venue has been checked by hand
 
 - [ ] Polymarket US accepts an account from your state (the sign-up eligibility check is the only authority;
       sources disagree about several states). If it does not, the venue is Kalshi and a new adapter is needed.
-- [ ] The current fee schedule on docs.polymarket.us matches `fees` in `config.yaml`.
-- [ ] Tick size and minimum order size, per market, are known and `execution.tick` / `sizing.min_order_usd` agree.
+- [x] Fee: `feeCoefficient` was 0.095 on every listed market on 2026-11-18, and the bot reads it per market.
+      Re-read docs.polymarket.us/fees for volume tiers and any change before funding.
+- [x] Tick size and minimum quantity are read per market from the exchange (`orderPriceMinTickSize`,
+      `minimumTradeQty`).
+- [x] `markets.settlement` on an open market answers 404; on a settled one, the YES payout (0 or 1).
 - [ ] The exchange rulebook's settlement and dispute process has been read.
 - [ ] The API terms allow automated trading on your own account (third-party guides say yes; read the terms).
 - [ ] How a NO ("short") order's price is expressed has been confirmed with `orders.preview` on a real market.
-- [ ] What `markets.settlement` returns for an open market has been observed.
+- [ ] Post-only orders (`participateDontInitiate`) behave as expected, and a rejected one is recognisable.
 
 ## 3. Keys
 

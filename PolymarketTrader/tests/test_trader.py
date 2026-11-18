@@ -128,26 +128,28 @@ def test_filters_keep_most_markets_away_from_the_forecaster(ledger, tmp_path):
           .add("nba-finals", category="sports")
           .add("too-soon", days=1)
           .add("too-far", days=200)
-          .add("thin", liquidity=100)
+          .add("thin", volume=100)
+          .add("shallow", size=1)
           .add("wide", bid=0.40, ask=0.50)
           .add("longshot", bid=0.03, ask=0.05)
           .add("will-x-say-y", title="Will the president say 'tariff' in the address?")
           .add("no-rules", rules=""))
     ex, fc, tr = setup(ledger, tmp_path, {"good-one": 0.5}, ex=ex)
     r = run(tr)
-    assert fc.asked == ["good-one"]
-    assert r.stats["listed"] == 9
+    assert fc.asked == ["good-one", "thin"]            # "thin" is forecast for the record but could never trade
+    assert r.stats["listed"] == 9                      # ten markets, but the sports one is never even downloaded
+    assert r.stats["tradable"] == 2                    # by its order book; "no-rules" is then dropped for its rules text
 
 
 def test_per_event_and_per_cycle_limits(ledger, tmp_path):
     ex = FakeExchange(NOW)
     for i in range(4):
-        ex.add(f"a{i}", event="same-event", liquidity=50000 - i)
+        ex.add(f"a{i}", event="same-event", bid=0.49, ask=0.50)      # tightest quotes come first
     for i in range(6):
-        ex.add(f"b{i}", liquidity=40000 - i)
+        ex.add(f"b{i}")
     ex, fc, tr = setup(ledger, tmp_path, {}, ex=ex)
     run(tr)
-    assert fc.asked == ["a0", "a1", "b0", "b1"]        # two per event, four per cycle, most liquid first
+    assert fc.asked == ["a0", "a1", "b0", "b1"]        # two per event, four per cycle, tightest quotes first
 
 
 def test_forecasts_are_not_repeated_until_due(ledger, tmp_path):
@@ -360,3 +362,49 @@ def test_config_typos_are_errors_not_silent_defaults(ledger, tmp_path):
         with pytest.raises(ValueError, match=key):
             ex, fc, tr = setup(ledger, tmp_path, {}, **{section: {key: 1}})
             run(tr)
+
+
+def test_market_tick_fee_and_minimum_size_come_from_the_exchange(ledger, tmp_path):
+    ex = (FakeExchange(NOW)
+          .add("fine-tick", bid=0.480, ask=0.486, tick=0.001)
+          .add("big-min", min_qty=100))
+    ex, fc, tr = setup(ledger, tmp_path, {"fine-tick": 0.70, "big-min": 0.70}, ex=ex)
+    r = run(tr)
+    o = ledger.q("SELECT * FROM orders")
+    assert len(o) == 1 and o[0]["market_id"] == "fine-tick"
+    assert o[0]["limit_price"] == pytest.approx(0.481)          # one 0.001 tick inside the bid, not a whole cent
+    assert any("minimum of 100 contracts" in line for line in r.log)
+
+
+def test_taker_fee_uses_the_market_coefficient(ledger, tmp_path):
+    ex = FakeExchange(NOW).add("cheap-fee", fee=0.02)
+    ex, fc, tr = setup(ledger, tmp_path, {"cheap-fee": 0.75}, ex=ex, execution={"style": "taker"})
+    run(tr)
+    pos = ledger.positions()[0]
+    assert ledger.one("SELECT SUM(fee) AS f FROM fills")["f"] == pytest.approx(pos["shares"] * 0.02 * 0.25, rel=1e-3)
+
+
+def test_thin_market_is_forecast_and_scored_but_never_traded(ledger, tmp_path):
+    ex = FakeExchange(NOW).add("thin", volume=120).add("deep")
+    ex, fc, tr = setup(ledger, tmp_path, {"thin": 0.70, "deep": 0.52}, ex=ex)
+    r = run(tr)
+    assert fc.asked == ["deep", "thin"]                # the tradable market gets the first forecast slot
+    assert ledger.q("SELECT * FROM orders") == []
+    reasons = {d["market_id"]: d["reason"] for d in ledger.q("SELECT * FROM decisions")}
+    assert "forecast only" in reasons["thin"]
+    assert len(ledger.q("SELECT * FROM forecasts")) == 2
+
+
+def test_untradable_markets_can_be_left_unforecast(ledger, tmp_path):
+    ex = FakeExchange(NOW).add("thin", volume=120).add("deep")
+    ex, fc, tr = setup(ledger, tmp_path, {}, ex=ex, universe={"forecast_untradable": False})
+    run(tr)
+    assert fc.asked == ["deep"]
+
+
+def test_order_is_capped_at_a_share_of_the_nearby_depth(ledger, tmp_path):
+    ex = FakeExchange(NOW).add("m", size=40)            # about $57 resting near the price on the thinner side
+    ex, fc, tr = setup(ledger, tmp_path, {"m": 0.70}, ex=ex)
+    run(tr)
+    o = ledger.q("SELECT * FROM orders")[0]
+    assert o["usd"] <= 0.25 * (0.48 * 40 + 0.47 * 80) + 0.01 and o["usd"] < 20.0

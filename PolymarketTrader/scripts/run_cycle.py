@@ -7,6 +7,7 @@
 Exit codes: 0 done, 3 skipped (quiet window, another cycle running, low memory), 4 safety stop, 1 error.
 """
 import argparse
+import re
 import sys
 import time
 
@@ -17,27 +18,29 @@ from src.config import load_config
 from src.forecast import make_backend
 from src.ledger import Ledger
 from src.trader import Trader
-from src.venue import PolymarketUS
+from src.venue import PolymarketUS, brief
 
 
 def scan(cfg, venue) -> int:
     st = universe.settings(cfg)
-    listed = venue.list_markets(max_events=int(st.get("max_events_scanned", 300)))
+    cats = list(st["categories_allow"]) or None
+    listed = venue.list_markets(max_events=int(st["max_events_scanned"]), categories=cats)
     for m in listed:
         m.raw["lite"] = True
     keep, dropped = universe.choose(listed, cfg, {}, set())
     reasons = {}
     for why in dropped.values():
-        key = why.split(" (")[0].split(" $")[0][:60]
+        key = re.sub(r"[-+]?\d[\d,.]*", "N", why)[:70]          # group "208 days ..." with "159 days ..."
         reasons[key] = reasons.get(key, 0) + 1
-    print(f"{len(listed)} open markets listed, {len(keep)} pass the listing filters\n")
-    for why, n in sorted(reasons.items(), key=lambda kv: -kv[1])[:15]:
-        print(f"  dropped {n:4d}  {why}")
-    print("\nFirst candidates (order books not checked yet):")
-    for m in keep[:20]:
+    print(f"{len(listed)} open markets listed in {', '.join(cats) if cats else 'all categories'}; "
+          f"{len(keep)} pass the listing filters ({venue.requests} requests)\n")
+    for why, n in sorted(reasons.items(), key=lambda kv: -kv[1])[:12]:
+        print(f"  dropped {n:5d}  {why}")
+    print("\nCandidates in forecast order (order books not checked yet):")
+    for m in keep[:40]:
         days = m.days_to_end()
-        print(f"  {m.market_id[:48]:48s} {m.category or '-':14s} {days if days is None else round(days):>4} d  "
-              f"liq ${m.liquidity or 0:>9,.0f}  {m.question[:70]}")
+        print(f"  {m.category or '-':11s} {days if days is None else round(days):>3} d  {m.best_bid:.3f}/{m.best_ask:.3f}  "
+              f"{m.question[:84]}")
     return 0
 
 
@@ -46,6 +49,7 @@ def main() -> int:
     ap.add_argument("--config", default=None)
     ap.add_argument("--no-forecast", action="store_true")
     ap.add_argument("--scan", action="store_true")
+    ap.add_argument("--db", default=None, help="ledger file (default data/pmt.db); use another for a trial run")
     args = ap.parse_args()
     cfg = load_config(args.config)
 
@@ -56,17 +60,17 @@ def main() -> int:
         return 3
 
     rt = cfg.get("runtime") or {}
-    venue = PolymarketUS(min_interval=float(rt.get("venue_min_interval_s", 0.5)))
+    venue = PolymarketUS(min_interval=float(rt.get("venue_min_interval_s", 1.0)))
     if args.scan:
         try:
             return scan(cfg, venue)
         except Exception as e:                       # the exchange is unreachable or changed its answer
-            print(f"scan failed: {type(e).__name__}: {e}")
+            print(f"scan failed: {brief(e)}")
             return 1
 
     try:
         with runtime.Lock(ROOT / "data" / "cycle.lock", float(rt.get("lock_stale_hours", 1))) as lock:
-            ledger = Ledger(ROOT / "data" / "pmt.db")
+            ledger = Ledger(args.db or ROOT / "data" / "pmt.db")
             try:
                 if ledger.deposits() == 0 and not safety.is_live(cfg):
                     start = float((cfg.get("account") or {}).get("paper_bankroll", 1000.0))

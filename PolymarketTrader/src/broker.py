@@ -30,10 +30,11 @@ class PaperBroker:
 
     # ---- entries -------------------------------------------------------------
     def buy_taker(self, run_id: str, market_id: str, outcome: str, book: Book, usd: float, limit: float,
-                  category: str | None = None, decision_id: int | None = None, now: float | None = None) -> float:
+                  category: str | None = None, decision_id: int | None = None, now: float | None = None,
+                  fee_rate: float | None = None) -> float:
         """Returns dollars spent (0 if nothing was available under the limit)."""
         now = now or time.time()
-        fills = simulate_buy(book, usd, limit, self.fees.fn(category), self.depth_haircut)
+        fills = simulate_buy(book, usd, limit, self.fees.fn(category, market_rate=fee_rate), self.depth_haircut)
         shares, avg, fee = summarize(fills)
         oid = self.ledger.add_order({"ts": now, "run_id": run_id, "mode": self.mode, "market_id": market_id,
                                      "token_id": book.token_id, "outcome": outcome, "side": "BUY", "limit_price": limit,
@@ -108,10 +109,11 @@ class PaperBroker:
 
     # ---- exits ----------------------------------------------------------------
     def sell_taker(self, run_id: str, market_id: str, outcome: str, book: Book, shares: float, limit: float,
-                   category: str | None = None, decision_id: int | None = None, now: float | None = None) -> float:
+                   category: str | None = None, decision_id: int | None = None, now: float | None = None,
+                   fee_rate: float | None = None) -> float:
         """Returns shares sold."""
         now = now or time.time()
-        fills = simulate_sell(book, shares, limit, self.fees.fn(category), self.depth_haircut)
+        fills = simulate_sell(book, shares, limit, self.fees.fn(category, market_rate=fee_rate), self.depth_haircut)
         sold, avg, fee = summarize(fills)
         oid = self.ledger.add_order({"ts": now, "run_id": run_id, "mode": self.mode, "market_id": market_id,
                                      "token_id": book.token_id, "outcome": outcome, "side": "SELL", "limit_price": limit,

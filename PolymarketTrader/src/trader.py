@@ -13,6 +13,8 @@ A failure in one market never stops the cycle; a failure of the account checks s
 """
 from __future__ import annotations
 
+import math
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -23,7 +25,7 @@ from .fees import FeeModel
 from .forecast import Forecast
 from .ledger import Ledger
 from .sizing import Exposure, SizingRules, exit_signal, plan_entry
-from .venue import Market
+from .venue import Market, brief
 
 DAY = 86400.0
 
@@ -51,6 +53,7 @@ class Trader:
         self.exit_margin = float(ex.get("exit_margin", 0.03))
         self.track_days = float(ex.get("track_forecasts_days", 7.0))
         self.reentry_cooldown_s = float(ex.get("reentry_cooldown_hours", 72.0)) * 3600.0
+        self.max_depth_share = float(ex.get("max_depth_share", 0.25))
         if safety.is_live(cfg):
             safety.require_live_confirmation(cfg)
             raise NotImplementedError("account.mode 'live' is not implemented: see docs/GO_LIVE.md")
@@ -70,7 +73,7 @@ class Trader:
         try:
             yes, no, state = self.venue.books(market_id)
         except Exception as e:                                   # one market's failure is not the cycle's
-            res.say(f"{market_id}: order book unavailable ({type(e).__name__}: {e})")
+            res.say(f"{market_id}: order book unavailable ({brief(e)})")
             return None
         self._books[market_id] = (yes, no, state)
         if snapshot:
@@ -127,7 +130,7 @@ class Trader:
             try:
                 m = self.venue.market(mid)
             except Exception as e:
-                res.say(f"{mid}: market detail unavailable ({type(e).__name__}: {e})")
+                res.say(f"{mid}: market detail unavailable ({brief(e)})")
                 m = None
             if m is not None:
                 self._markets[mid] = m
@@ -165,7 +168,7 @@ class Trader:
             try:
                 is_closed = self.venue.is_closed(mid)
             except Exception as e:
-                res.say(f"{mid}: resolution check failed ({type(e).__name__}: {e})")
+                res.say(f"{mid}: resolution check failed ({brief(e)})")
                 continue
             self.ledger.set_checked(mid, now)
             if is_closed:
@@ -177,7 +180,7 @@ class Trader:
         try:
             pay = self.venue.settlement(market_id)
         except Exception as e:
-            res.say(f"{market_id}: closed, settlement unavailable ({type(e).__name__}: {e})")
+            res.say(f"{market_id}: closed, settlement unavailable ({brief(e)})")
             return
         if pay is None:
             res.say(f"{market_id}: closed, waiting for settlement")
@@ -212,8 +215,10 @@ class Trader:
                 continue
             did = self.ledger.add_decision({"ts": now, "run_id": res.run_id, "market_id": mid, "forecast_id": f["id"],
                                             "action": "SELL", "reason": why, "p_model": f["p_yes"], "p_market": yes.mid})
+            known = self._markets.get(mid)
             sold = self.broker.sell_taker(res.run_id, mid, side, book, float(pos["shares"]), limit=book.best_bid - 0.02,
-                                          category=self._category(mid), decision_id=did, now=now)
+                                          category=self._category(mid), decision_id=did, now=now,
+                                          fee_rate=known.fee_rate if known else None)
             res.say(f"{mid}: SELL {sold:g} {side} ({why})")
             res.stats["exits"] = res.stats.get("exits", 0) + 1
 
@@ -222,9 +227,10 @@ class Trader:
         """Returns (market, forecast, forecast row id, market mid when the forecast was requested)."""
         st = universe.settings(self.cfg)
         try:
-            listed = self.venue.list_markets(max_events=int(st.get("max_events_scanned", 300)))
+            listed = self.venue.list_markets(max_events=int(st["max_events_scanned"]),
+                                             categories=list(st["categories_allow"]) or None)
         except Exception as e:
-            res.say(f"market listing failed ({type(e).__name__}: {e}): no new forecasts this cycle")
+            res.say(f"market listing failed ({brief(e)}): no new forecasts this cycle")
             return []
         for m in listed:
             m.raw["lite"] = True                                 # listing rows may lack the rules text
@@ -232,12 +238,37 @@ class Trader:
         last = {r["market_id"]: float(r["ts"]) for r in self.ledger.q("SELECT market_id, MAX(ts) AS ts FROM forecasts GROUP BY market_id")}
         candidates, dropped = universe.choose(listed, self.cfg, last, held, now)
         res.stats.update(listed=len(listed), passed_listing=len(candidates))
+        # Read the order book of every candidate (one request each), then spend the few forecasts on the best:
+        # held markets first, then markets deep enough to trade, then the rest (forecast and scored, not traded).
+        ranked = []
+        for m in candidates[:int(st["max_books_per_cycle"])]:
+            is_held = m.market_id in held
+            if getattr(self.venue, "rate_limited", 0) >= 3 and not is_held:
+                res.say("the exchange is rate limiting: no more order books this cycle")
+                break
+            b = self._load_books(m.market_id, res)
+            if b is None:
+                continue
+            why = "" if is_held else universe.book_check(b[0], b[2], st)
+            thin = "" if is_held else universe.trade_check(b[0], st) if not why else ""
+            if not why and thin and not st["forecast_untradable"]:
+                why = thin
+            if why:
+                dropped[m.market_id] = why
+                continue
+            ranked.append((0 if is_held else 1, 1 if thin else 0, 0 if m.market_id not in last else 1,
+                           -b[0].near_touch_usd(st["depth_band"]), m.market_id, m))
+        ranked.sort(key=lambda r: r[:5])
+        res.stats.update(candidates_with_books=len(ranked), tradable=sum(1 for r in ranked if r[1] == 0 and r[0] == 1))
+
         out, asked = [], 0
-        for m in candidates:
+        for *_, m in ranked:
             if asked >= int(st["max_candidates_per_cycle"]):   # attempts, not successes: a forecaster that is
                 break                                            # down must not be called once per listed market
+            is_held = m.market_id in held
+            b = self._books.get(m.market_id)
             try:
-                full = self.venue.market(m.market_id) or m
+                full = self.venue.enrich(m) or m                 # rules text and current status
             except Exception as e:
                 res.say(f"{m.market_id}: detail unavailable ({type(e).__name__})")
                 continue
@@ -245,12 +276,7 @@ class Trader:
             if full.closed:
                 dropped[m.market_id] = "closed"
                 continue
-            why = universe.prefilter(full, st, now) if m.market_id not in held else ""
-            b = self._load_books(m.market_id, res) if not why else None
-            if not why and b is None:
-                continue
-            if not why and m.market_id not in held:
-                why = universe.book_check(b[0], b[2], st)
+            why = "" if is_held else universe.prefilter(full, st, now)
             if why:
                 dropped[m.market_id] = why
                 continue
@@ -269,7 +295,7 @@ class Trader:
             try:
                 f = self.forecaster.forecast(full, now)
             except Exception as e:
-                res.say(f"{m.market_id}: forecaster failed ({type(e).__name__}: {e})")
+                res.say(f"{m.market_id}: forecaster failed ({brief(e)})")
                 continue
             finally:
                 self.heartbeat()
@@ -281,20 +307,31 @@ class Trader:
             res.say(f"{m.market_id}: forecast {f.p_yes:.2f} vs market {mid_then:.2f} ({f.confidence}, runs {f.p_runs})")
             out.append((full, f, fid, mid_then))
         res.stats.update(forecasts=len(out), dropped=len(dropped))
+        counts: dict[str, int] = {}
+        for why in dropped.values():
+            key = re.sub(r"[-+]?\$?\d[\d,.]*", "N", why)[:60]
+            counts[key] = counts.get(key, 0) + 1
+        top = sorted(counts.items(), key=lambda kv: -kv[1])[:6]
+        res.say(f"{len(listed)} markets listed, {len(candidates)} passed the listing filters, {len(ranked)} have a usable "
+                f"order book ({res.stats['tradable']} deep enough to trade), {asked} sent to the forecaster; "
+                f"not considered: " + "; ".join(f"{n} {why}" for why, n in top))
         return out
 
     # ---- 5. entries ----------------------------------------------------------------------
-    def _entry_prices(self, yes, no) -> tuple[float | None, float | None, float, float]:
-        """Price to pay for each side and the fee per share at that price."""
+    def _entry_prices(self, yes, no, m: Market) -> tuple[float | None, float | None, float, float]:
+        """Price to pay for each side and the fee per share at that price. The market's own tick size and fee
+        coefficient are used when the exchange gives them; the config values are the fallback."""
+        tick = m.tick or self.tick
         if self.style == "taker":
             ay, an = yes.best_ask, no.best_ask
-            return ay, an, (self.fees.per_share(ay) if ay else 0.0), (self.fees.per_share(an) if an else 0.0)
+            fee = lambda p: self.fees.per_share(p, m.category, market_rate=m.fee_rate) if p else 0.0
+            return ay, an, fee(ay), fee(an)
 
-        def passive(book):
+        def passive(book):                          # one tick inside the bid, never touching the ask
             if book.best_bid is None or book.best_ask is None:
                 return None
-            p = book.best_bid + self.tick if book.spread >= 2 * self.tick - 1e-9 else book.best_bid
-            return round(min(p, book.best_ask - self.tick), 4)
+            p = book.best_bid + tick if book.spread >= 2 * tick - 1e-9 else book.best_bid
+            return round(min(p, book.best_ask - tick), 4)
         return passive(yes), passive(no), 0.0, 0.0
 
     def entries(self, forecasts: list[tuple[Market, Forecast, int, float]], equity: float, acct: safety.AccountCheck,
@@ -341,7 +378,11 @@ class Trader:
                 skip("daily order budget used")
                 continue
 
-            py, pn, fy, fn = self._entry_prices(yes, no)
+            thin = universe.trade_check(yes, universe.settings(self.cfg))
+            if thin:
+                skip(f"forecast only, not traded: {thin}")
+                continue
+            py, pn, fy, fn = self._entry_prices(yes, no, m)
             sz = plan_entry(f.p_yes, yes.mid, py, pn, self._exposure(m, equity), self.rules,
                             days_to_resolution=m.days_to_end(now), fee_yes=fy, fee_no=fn)
             detail = {"side": sz.side, "kelly_full": sz.kelly_full, "binding": sz.binding, "limit": sz.limit_price,
@@ -349,7 +390,13 @@ class Trader:
             if not sz.trade:
                 skip(sz.reason, q=sz.q, cost=sz.cost, edge=sz.edge, detail=detail)
                 continue
-            stake = round(min(sz.stake, usd_left), 2)
+            # never more than a share of what is resting near the price: a bigger order would BE the market
+            room = self.max_depth_share * yes.near_touch_usd(universe.settings(self.cfg)["depth_band"])
+            stake = round(min(sz.stake, usd_left, room), 2)
+            if stake < self.rules.min_order_usd:
+                skip(f"only ${room:.2f} of depth to trade against (minimum order ${self.rules.min_order_usd:.2f})",
+                     q=sz.q, cost=sz.cost, edge=sz.edge, detail=detail)
+                continue
             days = m.days_to_end(now)
             problems = safety.check_order(self.cfg, usd=stake, equity=equity, forecast_ts=f.ts, forecast_mid=mid_then,
                                           mid_now=yes.mid, spread=yes.spread, book_ts=yes.ts, rules_clear=f.rules_clear,
@@ -358,14 +405,20 @@ class Trader:
                 skip("; ".join(problems), q=sz.q, cost=sz.cost, edge=sz.edge, detail=detail)
                 continue
             book = yes if sz.side == "YES" else no
+            if m.min_qty and stake / max(sz.cost, 1e-9) < m.min_qty:
+                skip(f"stake ${stake:.2f} buys fewer than the market's minimum of {m.min_qty:g} contracts",
+                     q=sz.q, cost=sz.cost, edge=sz.edge, detail=detail)
+                continue
             did = self.ledger.add_decision({**base, "action": f"BUY_{sz.side}", "reason": sz.reason, "q": sz.q,
                                             "cost": sz.cost, "edge": sz.edge, "stake": stake, "detail": detail})
             if self.style == "taker":
                 spent = self.broker.buy_taker(res.run_id, m.market_id, sz.side, book, stake, sz.limit_price,
-                                              category=m.category, decision_id=did, now=now)
+                                              category=m.category, decision_id=did, now=now, fee_rate=m.fee_rate)
                 res.say(f"{m.market_id}: BUY {sz.side} ${spent:,.2f} taken ({sz.reason})")
             else:
-                price = min(sz.cost, sz.limit_price)
+                tick = m.tick or self.tick
+                price = min(sz.cost, math.floor(sz.limit_price / tick + 1e-9) * tick)   # on the market's price grid
+                price = round(price, 4)
                 self.broker.place_resting(res.run_id, m.market_id, sz.side, book.token_id, price, stake, decision_id=did, now=now)
                 spent = stake
                 res.say(f"{m.market_id}: resting BUY {sz.side} ${stake:,.2f} @ {price:.3f} ({sz.reason})")
@@ -409,7 +462,7 @@ class Trader:
                              resting=len(self.broker.resting()), venue_requests=getattr(self.venue, "requests", None))
         except Exception as e:
             res.status = "error"
-            res.say(f"cycle failed: {type(e).__name__}: {e}")
+            res.say(f"cycle failed: {brief(e)}")
             self.ledger.finish_run(res.run_id, res.status, {"log": res.log, **res.stats})
             raise
         self.ledger.finish_run(res.run_id, res.status, {"log": res.log, **res.stats})

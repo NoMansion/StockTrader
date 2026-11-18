@@ -12,19 +12,31 @@ account:
 # ---- Which markets get a forecast (src/universe.py) ----------------------------
 universe:
   min_days_to_resolution: 3       # nearer than this, prices are at their most accurate and news moves fastest
-  max_days_to_resolution: 45      # further than this, money is locked up too long for the edge on offer
-  min_liquidity: 2000
-  min_volume: 5000
+  max_days_to_resolution: 75      # further than this, money is locked up too long for the edge on offer
+  # Two tiers, because this exchange's non-sports markets are thin. Measured live on 2026-11-18: of 95 tightly
+  # quoted candidates the median had $1 resting within 2 cents of the price and $48 traded in total; 12 had $50
+  # or more near the price, and 7 of those had traded $1,000 or more.
+  #   forecast tier (min_*):       a two-sided price worth scoring a forecast against
+  #   trade tier (trade_min_*):    enough behind the price that a $5-$20 order is not most of the book
+  min_volume: 0                   # dollars traded in the market so far
+  min_depth_usd: 5                # dollars resting within depth_band of the best price, on the thinner side
+  trade_min_volume: 1000
+  trade_min_depth_usd: 50
+  forecast_untradable: true       # also forecast first-tier-only markets: scored against the price, never traded
+  max_books_per_cycle: 60         # order books read per cycle (one small request each) to rank the candidates
+  depth_band: 0.02
   max_spread: 0.04
   price_range: [0.15, 0.85]       # no longshots, no near-certainties
-  min_touch_usd: 25
-  categories_allow: []            # empty = everything not denied below
-  # Sports: retail specialists are the least profitable group and the fee list keeps growing. Crypto: short-dated
-  # price markets are bot territory. Weather: a model-versus-model game, not a reading game (possible later
-  # module). Mentions / culture / entertainment: specialist or insider-prone.
-  categories_deny: [sports, esports, crypto, weather, mentions, culture, entertainment]
+  # Categories as the exchange names them (seen live 2026-11-18: sports, politics, culture, macro, technology,
+  # crypto, finance, geopolitics, science, climate). The allow list is also sent to the exchange, so the thousands
+  # of sports events are never downloaded.
+  # Left out on purpose. Sports: retail specialists are the least profitable group, and the state-law fights are
+  # about sports. Crypto: price-threshold markets are bot territory. Culture: award shows and charts, leak-prone.
+  # Climate: weather is a model-versus-model game, not a reading game (possible later module).
+  categories_allow: [macro, finance, technology, politics, geopolitics, science]
+  categories_deny: [sports, esports, crypto, culture, climate, weather, mentions, entertainment]
   max_markets_per_event: 2
-  max_events_scanned: 300
+  max_events_scanned: 2000
   max_candidates_per_cycle: 4     # forecasts per cycle; each is `forecaster.runs` Claude runs
   reforecast_after_hours: 48
 
@@ -69,16 +81,18 @@ execution:
   #           down to it. taker = lift the ask now and pay the fee. The research is consistent that makers earn
   #           and takers pay on these venues, so passive is the default.
   style: "passive"
-  tick: 0.01
+  tick: 0.01                      # fallback only: each market's own tick size is used when the exchange gives it
   resting_ttl_hours: 24
   depth_haircut: 0.5              # taker fills assume only half of the displayed size is really there
+  max_depth_share: 0.25           # an order is at most this share of the dollars resting near the price
   exit_margin: 0.03               # sell when our probability is this far below the bid
   reentry_cooldown_hours: 72      # after selling a market, stay out of it (both sides) this long
   track_forecasts_days: 7         # keep recording prices of forecast markets this long (for scoring)
 
 # ---- Fees (src/fees.py): fee per share = rate * p * (1 - p), takers only ------------
 fees:
-  taker_rate: 0.095               # Polymarket US entry tier (under $10k of 30-day volume), Nov 2026: RE-CHECK
+  taker_rate: 0.095               # fallback only: each market's own feeCoefficient is used when the exchange gives
+                                  # it (0.095 on all 19,110 markets listed on 2026-11-18)
   maker_rate: 0.0
 
 # ---- Safety limits (src/safety.py) ---------------------------------------------
@@ -103,5 +117,5 @@ runtime:
   quiet_windows: ["17:15-18:20"]  # local time; the stock trader's daily job runs 17:30-18:05 Central
   min_free_gb: 1.5                # do not start when the machine is short of memory
   low_priority: true
-  venue_min_interval_s: 0.5       # seconds between requests to the exchange
+  venue_min_interval_s: 1.0       # seconds between requests to the exchange (its public gateway rate-limits bursts)
   lock_stale_hours: 1             # a lock not refreshed for this long belongs to a dead run (it is refreshed after every forecast)
