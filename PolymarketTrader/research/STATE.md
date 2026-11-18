@@ -57,6 +57,15 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
 - 17:12: backtest engine committed (`research/panel.py`, `backtest.py`, `families.py`, `run_sweep.py`). Checked
   on a made-up exchange: with fair prices no taker rule passes; a planted bias is found on the right side.
 
+- 17:26: first live Kalshi scan ran past 8 minutes under rate limiting. The adapter now keeps the listing on disk
+  (`data/kalshi_listing.json`, refreshed at most every 20 h) and resumes a cut-off scan. A slow background scan
+  is filling it: check `python3 -c "import json;s=json.load(open('data/kalshi_listing.json'));print(bool(s.get('finished')),len(s['markets']))"`.
+  When it says True, run `python3 scripts/run_cycle.py --config data/cloud_config.yaml` (cloud config: no quiet
+  window, 2 runs, medium effort, 4 markets, 2 s pacing; recreate it from config.yaml if data/ was lost).
+- 17:45: round `r01_economics_prelim` on the first 1,476 Economics markets: all rules thin (411 events). Report
+  section 3.1. The download reaches about 9,000 markets an hour when Kalshi is not throttling.
+- Sample split fixed at 2026-04-01 (see rule 2 above). Account replay simulator added (`research/portfolio.py`).
+
 ## How to run a round
 
 ```
@@ -100,10 +109,17 @@ Forward-only (cannot be backtested):
 
 ## Next actions
 
-1. Round r01 on Economics as soon as its bars are in (check `sqlite3 data/kalshi_hist.db "select category,
-   sum(candles_done=1) from markets group by 1"`); rerun as each category lands. Write the first report section.
-2. Live Kalshi scan and one paper cycle (see Progress, 17:10), fix whatever the live data shows, commit.
-3. Second-round families not yet coded: ladder consistency (6), series persistence (11), combinations (14),
-   portfolio rules (15). Then sports and crypto samples (16).
-4. Start the forward test of Claude forecasts on Kalshi (17): one paper cycle every few hours with reduced
-   settings (2 runs, medium effort, 4 markets), ledger at `data/pmt.db`; export the forecast log to the report.
+1. Rerun the sweep as data lands: `python3 research/run_sweep.py --round r02_<what>`; first when Economics has
+   its 4,000 markets, then per category, then all categories together. Add a report section per round (data
+   seen, counts of pass / lead / loses, the tables that matter, what it means). Follow every lead with a round
+   that tests it where it was not found (other categories, the other half of the sample, tighter and looser
+   settings) before calling it anything.
+2. For rules that pass: run `research/portfolio.py` on them (stake 0.5%, 1%, 2% of equity; event cap 3%;
+   exposure cap 50%) and report return per year, drawdown and time in the market.
+3. Finish the bot's live Kalshi run (Progress, 17:26), fix what live data shows, then run a paper cycle every
+   few hours to build the forward record of Claude forecasts (family 17).
+4. Families still to code: the NO side of ladder inversions; sums of mutually exclusive events (needs the
+   event's `mutually_exclusive` flag: download `/historical/events` or `/events/{ticker}`); hourly bars for the
+   last two days before close; sports and crypto samples (`--categories Sports` on the downloader, last).
+5. After the non-sports first pass finishes, the downloader continues on its own with a second pass (all
+   remaining markets of 200+ contracts) and then the recently settled markets. Leave it running.
