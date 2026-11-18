@@ -150,3 +150,29 @@ ladders carry part of it.
 The buy-NO leads from 3.2 mostly faded. The one that strengthened is NO at 20 to 80 cents on markets listed 2 to
 7 days ago, by resting order: nothing in sample (+2%, t 0.3), +51% out of sample (t 4.2). One half only, so it
 stays a lead.
+
+### 3.4 The Economics leads, year by year (19:55 UTC)
+
+Before spending more rounds on the two leads left from 3.3, each was broken down by year, by series and by how
+much of its profit comes from its five best events. Same data as 3.3.
+
+| Lead | 2022 | 2023 | 2024 | 2025 | 2026 | Profit from 5 best events | Events that paid |
+|---|---|---|---|---|---|---|---|
+| Buy thin 5 to 20c longshots (taker) | +218% | +14% | +33% | −19% | +15% | 63% | 25% |
+| Buy any 5 to 20c longshot (taker) | +65% | +6% | +31% | −29% | −12% | (net loss recently) | 24% |
+| NO at 20 to 80c on markets listed 2 to 7 days ago (resting) | −18% | −10% | −5% | +3% | +30% | 49% | 49% |
+| For comparison, the reliable loser: taker NO against 5 to 10c longshots | −9% | −4% | −9% | −2% | −6% | n/a | 83% |
+
+**Both leads are dropped.** The longshot lead is 2022 and five events; it lost in 2025. The young-market lead is
+2026 only and lost in every earlier year, which is the pattern of a stretch in which numbers came in low, not of
+a pricing habit. The loser, by contrast, loses in every single year, with 83% of its events paying a little and
+the rest costing a lot: that is what a real, small, persistent mispricing looks like, and it is on the wrong
+side for anyone wanting a "safe" trade.
+
+Where Economics stands after four looks: **no mechanical rule earns money after costs out of sample; two
+"conservative" plays reliably lose it.** The engine now reports a year-by-year table for any lead before it is
+followed further.
+
+Operational note: this session's worker restarted around 19:10 UTC and killed both background jobs; the download
+gained only 160 Politics markets in the hour. Both are restarted, a watchdog check-in now restarts them every
+half hour, and the paper loop keeps its schedule in the ledger so a restart does not reset its clock.

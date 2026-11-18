@@ -35,20 +35,19 @@ reads first. Keep it short and current. Findings go in the report; this is the c
 
 ## Background jobs
 
-| Job | Command (from `PolymarketTrader/`) | Log |
-|---|---|---|
-| Kalshi history download | `setsid nohup python3 -u research/kalshi_download.py --interval 0.4 --min-volume 200 --first-pass 2500 >> data/kalshi_download.log 2>&1 < /dev/null &` | `data/kalshi_download.log` |
-
-| Paper bot on Kalshi, every 3 h | `setsid nohup bash -c 'while true; do sleep 10800; python3 scripts/run_cycle.py --config data/cloud_config.yaml >> data/run_cycle.log 2>&1; python3 scripts/export_forecasts.py >> data/run_cycle.log 2>&1; done' > /dev/null 2>&1 < /dev/null &` | `data/run_cycle.log` |
+Start whatever is not running, at any time: **`bash research/start_jobs.sh`** (from `PolymarketTrader/`). It
+starts the Kalshi history download (resumable; log `data/kalshi_download.log`) and the paper loop
+(`scripts/paper_loop.py`, one cycle every 3 h by the ledger's clock; log `data/run_cycle.log`). The worker of this
+session restarts now and then and kills them; a second scheduled check-in ("PolymarketTrader job watchdog", at
+minute 21) runs the script every hour too.
 
 The paper loop is the forward test of Claude's forecasts (family 17). Its ledger is `data/pmt.db` (not committed);
 `python3 scripts/export_forecasts.py` writes the durable copy, `reports/forward_log.csv`, which IS committed: run it
-and commit at every check-in. Check the loop with `pgrep -af "sleep 10800"`. `data/cloud_config.yaml` is
-config.yaml with: no quiet window, 2 runs, medium effort, 4 markets, 40 books, 2 s pacing.
-
-Check with `pgrep -af kalshi_download` and `tail -3 data/kalshi_download.log`. It is resumable: if it died, run
-the same command again. If `data/` is gone (new container), run it again from scratch; listing takes about 1.5
-hours and bars arrive at roughly 8,000 markets an hour.
+and commit at every check-in. `data/cloud_config.yaml` is config.yaml with: no quiet window, 2 runs, medium effort,
+4 markets, 40 books, 2 s pacing. If `data/` is gone (new container): recreate that file, run the script, and
+expect the listing to take about 1.5 hours per category before bars arrive (about 2,500 markets an hour when
+Kalshi throttles, 9,000 when it does not). The first cycle after a loss of `data/` starts a NEW paper account:
+say so in the report, and keep `reports/forward_log.csv` (append, do not overwrite the old rows).
 
 The download writes `data/kalshi_hist.db` (tables `series`, `markets`, `candles`). It is not committed: Kalshi's
 terms do not allow redistributing its data. Commit code, aggregated results and reports only.
@@ -92,6 +91,11 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   FIRST LIVE KALSHI CYCLE DONE: 4 forecasts (3 low confidence, not traded), 1 paper order: resting NO $20 @ 0.65
   on KXGOVTSHUTDOWN-26DEC12 (Claude 0.205, market 0.345). Paper loop started, every 3 h. Commodities removed from
   the bot's categories. Download restarted with `--first-pass 2500` (Politics in progress).
+
+- 19:55 (check-in 3): both jobs were dead (worker restart about 19:10); restarted with `research/start_jobs.sh`;
+  watchdog trigger added. No new round (Politics has only 560 markets with bars). Year-by-year breakdown of the
+  two Economics leads: both dropped (report 3.4). Rule for the future: any lead gets a year-by-year and
+  concentration table before another round is spent on it.
 
 ## How to run a round
 
