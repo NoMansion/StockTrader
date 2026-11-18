@@ -124,3 +124,29 @@ expected through 2025 and 2026). It gets tested where that explanation cannot ap
 sample and nothing in sample. They are the same NO tilt wearing a different name, not evidence about momentum.
 
 **Still thin:** every price × days cell, the ladders (10 rules), persistence (7), and all combinations.
+
+### 3.3 Round r03, Economics first pass complete, 3,215 markets (18:00 UTC)
+
+Data: 3,215 Economics markets in 845 events (the 4,000 biggest, less those never quoted), 243,542 daily bars;
+1,201 markets out of sample. Same 2,018 rules.
+
+Result: **0 pass, 9 leads (down from 19), 15 reliably lose.** Adding 190 events removed half the leads, which is
+what leads that were luck look like.
+
+| What held up | In sample | t | Out of sample | t | Events in / out |
+|---|---|---|---|---|---|
+| Taker NO against a 5 to 10c longshot loses | −5.1% | −3.2 | −8.4% | −4.4 | 383 / 150 |
+| ... and against 5 to 20c longshots in markets with under $50 traded that week | −9.8% | −4.1 | −16.3% | −5.1 | 276 / 117 |
+| Taker YES at 50c or more, 30 days before close, loses | −8.5% | −3.3 | −14.5% | −3.6 | 419 / 149 |
+
+Selling longshots is the most solid result in the category so far: it loses on both sides of the split, on both
+weightings, and loses most where the market is quietest. The other side of that trade, buying those thin
+longshots, returns +22% in sample (t 1.2) and +61% out of sample (t 2.5; counted per event, t 1.7). That is a
+lead with lottery-ticket variance: most bets lose everything, and it needs several times more events to judge.
+
+The favourite loss is weaker counted per event out of sample (−8 to −9%, t about −2) than per bet: a few big
+ladders carry part of it.
+
+The buy-NO leads from 3.2 mostly faded. The one that strengthened is NO at 20 to 80 cents on markets listed 2 to
+7 days ago, by resting order: nothing in sample (+2%, t 0.3), +51% out of sample (t 4.2). One half only, so it
+stays a lead.

@@ -75,6 +75,11 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   lands; (b) split by strike_type greater / less / between wherever "less" exists; (c) year-by-year table for
   any lead; (d) does the favourite loss shrink with a resting entry and near the close?
 
+- 18:00: round `r03_economics_4000` (Economics first pass complete: 3,215 markets, 845 events), report 3.3.
+  0 pass, 9 leads, 15 lose. Solid: taker NO against 5-20c longshots loses; taker YES on favourites loses. Leads to
+  re-test on other categories: buying thin 5-20c longshots; NO on markets listed 2-7 days ago. Download has
+  moved on to Politics (2,526 series to list, then bars).
+
 ## How to run a round
 
 ```
