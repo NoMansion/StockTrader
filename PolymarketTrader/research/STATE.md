@@ -155,6 +155,11 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   test passes both halves; 2024 a losing year); the wider NO edge (5-35c) fades to zero at this level. Politics
   random pass resumed, then its census, then Companies.
 
+- 5:53 pm CST (check-in 8): jobs alive, nothing new landed. Listed the rule's losing bets (report 3.11): macro
+  data surprises, three of nine from January 2024 releases; Politics losses are "X happened before the date".
+  Idea for the backlog: cap the rule's exposure per release month / per underlying statistic, and test whether
+  skipping "data release above X" thresholds within N standard moves helps (needs the release history; later).
+
 ## How to run a round
 
 ```

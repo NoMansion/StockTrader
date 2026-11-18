@@ -428,6 +428,14 @@ Every pass is again "buy NO where YES is very cheap".
   overpriced its cheap YES.
 - **Thinner entries.** A quarter of entry days traded under 100 contracts, twice the share at the higher level.
 
+**What a loss looks like.** The nine Economics losses are data surprises: CPI for January 2024 above 0.2%
+(bought NO at 99c), core CPI the same month, payrolls for January 2024 at 300,000 or more, payrolls for
+September 2024 above 250,000, CPI for January 2025 above 0.4%, payrolls for January 2026 above 125,000, the
+weekly gas price, Argentina's monthly inflation, the petroleum reserve level. Three of the nine came from one
+month's releases (January 2024): the losses are not independent, which is the clustering risk of section 3.8
+showing up in the record. The Politics losses in the 45,000-contract sample are "will X happen before a date"
+questions where X then happened: a veto, a resignation, a White House visit, a tariff ending.
+
 **Housekeeping.** The session's container was restarted at about 5:45 pm CST. The data survived; the download
 and the paper loop were restarted within two minutes.
 
