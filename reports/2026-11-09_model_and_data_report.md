@@ -644,3 +644,24 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
   | Added rules | 14-day min hold / earnings-quality screen | 1.321 / 1.342 | | 14.2 / 14.5% |
 
 - **Reading.** The live model sits on a flat top: the best neighbour is +0.008, far inside the noise, and most steps away lose 0.02-0.10. No single setting is a sharp peak, which is what a robust choice looks like. Nothing changes. The ranker-weight, seasonal and neighbour families on the live model are closed.
+
+### 8.21 Tuesday 2026-11-17, 7:00 pm: faster exposure gates promoted (rounds 59-66)
+
+- **What changed (paper account, from the Wednesday 2026-11-18 job).** Only the exposure layer. The volatility window is 10 days instead of 20, the new-highs-minus-new-lows gate sums 5 days instead of 10, and a new gate halves the budget while the NYSE advance/decline line is below its 100-day average. Stock picking, sizing, the IEF/GLD sleeve and every other setting are unchanged.
+
+  | | New | Previous (same build) |
+  |---|---|---|
+  | Stitched Sharpe | **1.408** | 1.348 |
+  | 2000-2010 Sharpe | 1.768 | 1.760 |
+  | CAGR | 15.1% | 14.7% |
+  | Max drawdown | -17.1% | -21.8% |
+  | Worst year | -10.7% (2022) | -10.7% (2022) |
+  | Under the measured cost-by-rank schedule | 1.377 | 1.324 |
+
+- **How it was found.** Round 59 (new stock signals) and the round 60 sleeve, sizing and trading-rule tests found nothing that beat the control. Only exposure settings did, each by +0.01 to +0.04 on its own. Round 63 ran every combination of them (71 cells). 5-day breadth smoothing was in almost every top cell (1.39-1.41), and the cell above passed every promote check.
+- **Confirmation (round 65).** Each of the winner's settings was moved to in-between values (smoothing 3/4/6/7 days, vol window 7/14, vol target 13/17, A/D average 75/150). All 10 neighbours scored 1.377-1.421, so this is a broad plateau, not a lone peak.
+- **Round 64 (stacking).** The two round 60 trading rules that won narrowly (30% minimum trade, a drift rule) gave identical results alone or together (+0.002). They almost never bind, so they were left out.
+- **Round 66 (gate strength).** Round 60's cut-size test had used a setting name the sweep ignores (`hl_low`; the sweep reads `hl_days_low`), so it had never really run. Rerun on the leader: cuts to 25% or 75% scored 1.385-1.424. The best (A/D cut to 75%, 1.424) is +0.016, inside the noise, so the 50% default stays.
+- **Checks before the switch.** The exact replay matched with zero difference, and the lagged stock + sleeve budget never went over 100% (max 98%). pytest: 131 passed. The dry run passed every safety check.
+- **What to expect tomorrow.** With today's market the new gates leave **12% in stocks** (31% under the old settings) and 86% in IEF/GLD. The A/D line is below its 100-day average and breadth is negative, so two gates are cutting at once. That is the model working as designed, but it is a large one-day shift into bonds and gold.
+- **Still running.** Round 67 tests 13 other market gates, the round 58 near misses and the IEF+TLT+GLD sleeve on the new model. Round 68 re-tunes the stock-side settings around the new gates and stress-tests double trading costs.
