@@ -268,6 +268,18 @@ def f_longshot(f: Features):
                    cheap & (f.ev_total >= 3) & (f.fav == fav), "no", entry)
 
 
+# 26. The favourite-longshot bias as one rule: buy the dear side of any contract whose cheap side is under x
+def f_dear_side(f: Features):
+    for x, (d0, d1), smax, entry in itertools.product((0.10, 0.20, 0.35, 0.50), [(0, 10000), (0, 30), (30, 10000)], (0.03, 0.10), ENTRIES):
+        m = f.base & f.days(d0, d1) & (f.spread <= smax)
+        tag = f"{'any time' if d1 > 9000 and d0 == 0 else name_range(d0, d1, 'd') + ' to scheduled end'}, spread <= {smax * 100:g}c"
+        yield "26 dear side", f"NO where YES is at {x * 100:g}c or less, {tag}", m & (f.mid > 0) & (f.mid <= x), "no", entry
+        yield "26 dear side", f"YES where YES is at {100 - x * 100:g}c or more, {tag}", m & (f.mid >= 1 - x), "yes", entry
+    for (lo, hi), entry in itertools.product([(0.05, 0.35), (0.05, 0.20), (0.10, 0.35), (0.03, 0.50)], ENTRIES):
+        yield "26 dear side", f"NO where YES is at {name_range(lo * 100, hi * 100, 'c')}", f.base & f.price(lo, hi), "no", entry
+        yield "26 dear side", f"YES where YES is at {name_range(100 - hi * 100, 100 - lo * 100, 'c')}", f.base & f.price(1 - hi, 1 - lo), "yes", entry
+
+
 # 14. Combinations of the single-factor conditions
 def f_combos(f: Features):
     price = [(0.03, 0.10), (0.10, 0.25), (0.25, 0.50), (0.50, 0.75), (0.75, 0.90), (0.90, 0.97)]
@@ -311,6 +323,7 @@ def all_rules(f: Features, titles: np.ndarray):
     yield from f_cumvol(f)
     yield from f_life(f)
     yield from f_longshot(f)
+    yield from f_dear_side(f)
 
 
 # 11. Persistence: is a series that paid one side in the first half still paying it in the second?

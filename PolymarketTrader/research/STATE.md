@@ -135,6 +135,15 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   ticker), minimum volume 1, first pass 2,500 random markets per category, Economics first. Panel uses the
   random sample only. Next round must be on the random sample and must say whether the r02-r04 pattern survives.
 
+- 4:55 pm CST (check-in 5, 22:55 UTC): r05/r06 superseded the same hour by **r07** (after the schedule fix, with
+  families 16 to 26). Random Economics and Politics: 0 pass; the r02-r04 "dear side loses" pattern is gone
+  (report 3.6). Busy markets, Economics + Politics at 45,000 contracts: 22 pass, 49 leads, all "buy NO where
+  YES is cheap" (report 3.7). The 5-cent rule taken apart (3.8): tail test passes both halves; small in dollars;
+  all losses in 2025-26. Forward observation log started (3.9). Paper bot config NOT changed: the rule needs
+  prices above `sizing.max_price`; left as the user's decision (second paper account).
+  Download: Economics census down to 5,000 contracts in progress, then Politics random pass and census, then
+  Companies onward.
+
 ## How to run a round
 
 ```
@@ -178,16 +187,19 @@ Forward-only (cannot be backtested):
 
 ## Next actions
 
-1. When the random Economics sample has about 1,500 markets with bars (`python3 research/panel.py` prints the
-   count; markets never quoted are attempted but carry no bars, so expect fewer bars than attempts), run
-   `python3 research/run_sweep.py --round r05_random_economics`. First question: do "taker YES at 65-90c loses"
-   and "taker NO against 5-20c longshots loses" survive? Write the answer as section 3.6 whichever way it goes.
-2. Then per category as each random sample lands, then all together. Leads get the year-by-year and
-   concentration table (report 3.4 shows the form) before another round is spent on them.
-3. For rules that pass on the random sample: `research/portfolio.py` (stake 0.5%, 1%, 2%; event cap 3%; exposure
-   cap 50%), report return per year, drawdown, time in the market.
-4. Forward test: `tail -20 data/run_cycle.log`, `python3 scripts/export_forecasts.py`, commit the CSV, one line
-   in the report on how many forecasts exist and what was traded.
-5. Families still to code: the NO side of ladder inversions; sums over mutually exclusive events (needs each
-   event's `mutually_exclusive` flag); hourly bars for the last two days; a volume-at-the-time filter family;
-   sports and crypto samples last.
+1. Each check-in: `python3 research/panel.py` (what landed), then for every category with a finished pass run
+   both samples: `python3 research/run_sweep.py --round rNN_random_<cat> --categories <Cat>` and
+   `... --round rNN_liquid_<cat> --categories <Cat> --sample liquid` (default level = as far down as the census is
+   complete; use `--min-cumvol 45000` when comparing with report 3.7). `python3 research/round_tables.py <round>`
+   prints the tables for the report.
+2. **Re-test the 5-cent rule on every new category and at the lower census level** (Economics is being extended
+   to 5,000 contracts): `python3 research/analyze_rule.py --sample liquid --categories <Cat> --rule "NO at mid <= 5c,
+   <= 30d, spread <= 5c" --side no --entry tk` (and `mk`). A category where it fails is a result too: write it.
+3. Leads to follow on the busy sample: NO where YES is 5 to 35c, resting (+6% / +6%, t 2.1 out of sample, thin);
+   NO at 3 to 10c after a fall of 3c+ (momentum cross). They need more events: wait for more categories.
+4. Forward: `tail -20 data/run_cycle.log`; `python3 scripts/shadow_longshot.py --report`; commit
+   `reports/forward_log.csv`; one line each in the report.
+5. Still to code: sums over mutually exclusive events with Kalshi's own flag (needs `/events`); hourly bars for
+   the last two days; exits before settlement (sell the NO at 99c instead of waiting); a combined-portfolio
+   replay of several passing rules; sports and crypto samples last.
+6. Open for the user: trade the 5-cent rule in a second paper account? Which Claude model for the forecaster?
