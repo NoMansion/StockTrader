@@ -148,6 +148,8 @@ class FakeKalshiHTTP:
                        "KXNBA": {"ticker": "KXNBA", "category": "Sports", "fee_type": "quadratic", "fee_multiplier": 1, "tags": []}}
         self.markets: dict[str, dict] = {}
         self.books: dict[str, dict] = {}
+        self.page_size = 0                          # 0 = everything on one page
+        self.fail_markets = 0                       # how many /markets requests to refuse with a 429
 
     def add(self, ticker: str, series: str = "KXCPIYOY", days: float = 20, bid: float = 0.48, ask: float = 0.50,
             size: float = 500, volume: float = 50000, title: str = None):
@@ -183,8 +185,14 @@ class FakeKalshiHTTP:
         if path == "/markets":
             lo, hi = params.get("min_close_ts", 0), params.get("max_close_ts", 9e18)
             from src.venue import parse_time
-            return {"markets": [m for m in self.markets.values()
-                                if m["status"] == "active" and lo <= parse_time(m["close_time"]) <= hi], "cursor": ""}
+            if self.fail_markets:
+                self.fail_markets -= 1
+                raise KalshiError(429, path, "too many requests")
+            live = [m for m in self.markets.values() if m["status"] == "active" and lo <= parse_time(m["close_time"]) <= hi]
+            size = self.page_size or len(live) or 1
+            start = int(params.get("cursor") or 0)
+            nxt = start + size
+            return {"markets": live[start:nxt], "cursor": str(nxt) if nxt < len(live) else ""}
         if path.startswith("/markets/") and path.endswith("/orderbook"):
             return self.books[path.split("/")[2]]
         if path.startswith("/markets/"):

@@ -149,3 +149,47 @@ def test_http_client_waits_out_a_rate_limit(monkeypatch):
         KalshiHTTP(min_interval=0, client=Client([Resp(429), Resp(429)])).get("/x", tries=2)
     pager = KalshiHTTP(min_interval=0, client=Client([Resp(200, {"markets": [1, 2], "cursor": "c"}), Resp(200, {"markets": [3], "cursor": ""})]))
     assert list(pager.pages("/markets", "markets")) == [1, 2, 3]
+
+
+def test_listing_is_cached_and_a_cut_off_scan_resumes(tmp_path):
+    http = FakeKalshiHTTP(NOW)
+    for i in range(5):
+        http.add(f"M{i}")
+    http.page_size = 2
+    v = Kalshi(http=http, clock=lambda: NOW, cache_dir=tmp_path)
+    http.fail_markets = 0
+    first = v.list_markets(categories=["economics"], min_days=3, max_days=75)
+    assert len(first) == 5 and not v.listing_partial
+    n = http.requests
+    again = Kalshi(http=http, clock=lambda: NOW + 3600, cache_dir=tmp_path).list_markets(categories=["economics"], min_days=3, max_days=75)
+    assert len(again) == 5 and http.requests == n                  # an hour later: served from disk, no requests
+    later = Kalshi(http=http, clock=lambda: NOW + 21 * 3600, cache_dir=tmp_path)
+    assert len(later.list_markets(categories=["economics"], min_days=3, max_days=75)) == 5 and http.requests > n
+
+    # a scan cut off by throttling keeps its pages and carries on from the same place
+    cut_dir = tmp_path / "cut"
+    http2 = FakeKalshiHTTP(NOW)
+    for i in range(5):
+        http2.add(f"M{i}")
+    http2.page_size = 2
+    v2 = Kalshi(http=http2, clock=lambda: NOW, cache_dir=cut_dir)
+    v2._load_series(["Economics"])
+    http2.fail_markets = 0
+    v2.http.get("/markets", status="open")                          # warm-up call, unrelated to the scan
+    http2.fail_markets = 0
+    part = None
+    real_get = http2.get
+    calls = {"n": 0}
+
+    def flaky(path, tries=6, **params):
+        if path == "/markets" and params.get("cursor"):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                from src.kalshi_http import KalshiError
+                raise KalshiError(429, path, "too many requests")
+        return real_get(path, tries=tries, **params)
+    http2.get = flaky
+    part = v2.list_markets(categories=["economics"], min_days=3, max_days=75)
+    assert len(part) == 2 and v2.listing_partial                    # first page only
+    rest = Kalshi(http=http2, clock=lambda: NOW + 600, cache_dir=cut_dir).list_markets(categories=["economics"], min_days=3, max_days=75)
+    assert len(rest) == 5

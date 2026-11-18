@@ -109,11 +109,13 @@ class Kalshi:
     name = "kalshi"
 
     def __init__(self, http: KalshiHTTP | None = None, min_interval: float = 1.0, clock=time.time,
-                 cache_dir: str | Path | None = None, series_cache_hours: float = 24.0):
+                 cache_dir: str | Path | None = None, series_cache_hours: float = 24.0, listing_cache_hours: float = 20.0):
         self.http = http or KalshiHTTP(min_interval=min_interval)
         self.clock = clock
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self.series_cache_hours = float(series_cache_hours)
+        self.listing_cache_hours = float(listing_cache_hours)
+        self.listing_partial = False                # True when the last scan was cut off by throttling
         self._series: dict[str, dict] = {}          # series ticker -> {category, fee_type, fee_multiplier, tags}
         self._series_cats: set[str] = set()
         self._seen: dict[str, Market] = {}          # markets met this run: volume and fees for books()
@@ -160,11 +162,19 @@ class Kalshi:
         return self._series.get(series_of(event_ticker))
 
     # ---- listing ---------------------------------------------------------------------
+    KEEP = ("ticker", "event_ticker", "status", "result", "title", "yes_sub_title", "close_time", "yes_bid_dollars",
+            "yes_ask_dollars", "last_price_dollars", "volume_fp", "open_interest_fp", "price_ranges", "market_type")
+
     def list_markets(self, max_events: int = 2000, categories: list[str] | None = None, min_days: float = 0.0,
                      max_days: float = 400.0, max_pages: int = 400, **_ignored) -> list[Market]:
         """Open binary markets of the wanted categories closing between min_days and max_days from now, with a
         two-sided quote. Categories are matched without regard to case; Kalshi's own names are, for example,
-        "Economics", "Politics", "Companies", "Commodities", "Science and Technology"."""
+        "Economics", "Politics", "Companies", "Commodities", "Science and Technology".
+
+        The full listing is about 150 requests, and Kalshi throttles them. So the result is kept on disk and
+        reused for `listing_cache_hours`; a scan that is cut off keeps what it has and carries on from the same
+        place next time. Listed quotes can therefore be hours old: they only decide which order books to read,
+        and every decision after that uses a fresh book and fresh market detail."""
         if not categories:
             raise ValueError("Kalshi needs an allow list of categories (universe.categories_allow): "
                              "listing everything means downloading about 180,000 markets")
@@ -172,24 +182,73 @@ class Kalshi:
                                         "Science and Technology", "Climate and Weather", "Crypto", "Entertainment",
                                         "Mentions", "Health", "Social", "World", "Sports")}
         self._load_series([names.get(c.lower(), c) for c in categories])
-        allowed = {c.lower() for c in categories}
+        allowed = sorted(c.lower() for c in categories)
         now = self.clock()
+        key = {"categories": allowed, "min_days": float(min_days), "max_days": float(max_days)}
+        st = self._read_listing()
+        fresh = st.get("key") == key and st.get("finished") and now - st["finished"] < self.listing_cache_hours * 3600
+        resume = st.get("key") == key and not st.get("finished") and st.get("cursor") and now - st.get("started", 0) < 3 * 3600
+        if not fresh:
+            if not resume:
+                st = {"key": key, "started": now, "finished": None, "cursor": None, "markets": [],
+                      "lo": int(now + min_days * 86400), "hi": int(now + max_days * 86400)}
+            self.listing_partial = False
+            for _ in range(max_pages):
+                try:
+                    d = self.http.get("/markets", tries=4, limit=1000, cursor=st["cursor"], status="open",
+                                      min_close_ts=st["lo"], max_close_ts=st["hi"])
+                except KalshiError:
+                    self.listing_partial = True         # throttled: keep what we have, carry on next time
+                    break
+                page = d.get("markets") or []
+                for m in page:
+                    if m.get("market_type") not in (None, "binary"):
+                        continue
+                    info = self._info(m.get("event_ticker"))
+                    if info is None or info["category"].lower() not in allowed:
+                        continue                        # sports and the rest are dropped here, a market at a time
+                    if not (_num(m.get("yes_bid_dollars")) or 0) > 0 or not (_num(m.get("yes_ask_dollars")) or 1) < 1:
+                        continue
+                    st["markets"].append({k: m.get(k) for k in self.KEEP})
+                st["cursor"] = d.get("cursor") or None
+                if not st["cursor"] or not page:
+                    st["finished"] = self.clock()
+                    break
+                self._write_listing(st)
+            self._write_listing(st)
         out: list[Market] = []
-        pages = self.http.pages("/markets", "markets", limit=1000, max_pages=max_pages, status="open",
-                                min_close_ts=int(now + min_days * 86400), max_close_ts=int(now + max_days * 86400))
-        for m in pages:
-            if m.get("market_type") not in (None, "binary"):
+        seen = set()
+        for m in st["markets"]:
+            if m["ticker"] in seen:
                 continue
-            info = self._info(m.get("event_ticker"))
-            if info is None or info["category"].lower() not in allowed:
-                continue                            # sports and the rest are dropped here, a market at a time
-            mk = market_from_kalshi(m, info)
-            if mk.closed or mk.best_bid is None or mk.best_ask is None:
+            seen.add(m["ticker"])
+            mk = market_from_kalshi(m, self._info(m.get("event_ticker")))
+            days = mk.days_to_end(now)
+            if mk.closed or mk.best_bid is None or mk.best_ask is None or days is None or days < 0:
                 continue
-            mk.raw["has_rules"] = True              # Kalshi listings carry the rules text
             out.append(mk)
             self._seen[mk.market_id] = mk
         return out
+
+    def _read_listing(self) -> dict:
+        path = self.cache_dir / "kalshi_listing.json" if self.cache_dir else None
+        if path is None:
+            return getattr(self, "_listing_mem", {})
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    def _write_listing(self, st: dict) -> None:
+        self._listing_mem = st
+        if self.cache_dir:
+            try:
+                self.cache_dir.mkdir(parents=True, exist_ok=True)
+                tmp = self.cache_dir / "kalshi_listing.json.tmp"
+                tmp.write_text(json.dumps(st), encoding="utf-8")
+                tmp.replace(self.cache_dir / "kalshi_listing.json")
+            except OSError:
+                pass
 
     # ---- one market ---------------------------------------------------------------------
     def _detail(self, ticker: str) -> dict | None:

@@ -126,4 +126,5 @@ runtime:
   min_free_gb: 1.5                # do not start when the machine is short of memory
   low_priority: true
   venue_min_interval_s: 1.0       # seconds between requests to the exchange (its public gateway rate-limits bursts)
+  listing_cache_hours: 20         # Kalshi: the full market listing is refreshed at most this often (it is ~150 throttled requests)
   lock_stale_hours: 1             # a lock not refreshed for this long belongs to a dead run (it is refreshed after every forecast)

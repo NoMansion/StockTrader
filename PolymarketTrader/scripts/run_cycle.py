@@ -51,7 +51,7 @@ def make_venue(cfg):
     name = str((cfg.get("account") or {}).get("venue", "kalshi")).lower()
     pace = float(rt.get("venue_min_interval_s", 1.0))
     if name == "kalshi":
-        return Kalshi(min_interval=pace, cache_dir=ROOT / "data")
+        return Kalshi(min_interval=pace, cache_dir=ROOT / "data", listing_cache_hours=float(rt.get("listing_cache_hours", 20)))
     if name == "polymarket_us":
         return PolymarketUS(min_interval=pace)
     raise ValueError(f"unknown account.venue {name!r} (kalshi or polymarket_us)")
