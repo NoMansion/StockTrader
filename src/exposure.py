@@ -24,6 +24,13 @@ Breadth gates (Norgate index series, fetched through `EXT_LOADER`; sweep Nov 202
                    (#NYSEHI - #NYSELO). N = 10 on top of ret12mhalf_vt15 + inverse-vol sizing:
                    stitched Sharpe 0.76 vs 0.73, max DD -13% vs -20%.
     "ad_ma": N     0.5 ("ad_low") while the NYSE cumulative A/D line (#NYSEAD) is below its N-day MA.
+
+Sentiment / credit gates (sweep rounds 67-71, live since 2026-11-18):
+    "pcr_pct": q   0.5 ("pcr_low") while the CBOE equity put/call ratio (#CBOEPCE), 20-day average, is below
+                   the q quantile of its own trailing 252 days (few puts bought = complacency).
+    "nfci_gt": x   0.5 ("nfci_low") while the Chicago Fed National Financial Conditions Index (#NFCI) is above x
+                   (tighter than average when x = 0). Norgate dates NFCI by its reference week; it is published
+                   later, so the value is used 7 trading days after its date.
 """
 from __future__ import annotations
 
@@ -55,7 +62,8 @@ STRING_SPECS = {
 }
 
 
-GATE_SYMBOLS = {"hl_days": ["#NYSEHI", "#NYSELO"], "ad_ma": ["#NYSEAD"]}
+GATE_SYMBOLS = {"hl_days": ["#NYSEHI", "#NYSELO"], "ad_ma": ["#NYSEAD"], "pcr_pct": ["#CBOEPCE"], "nfci_gt": ["#NFCI"]}
+NFCI_LAG_DAYS = 7      # trading days from NFCI's reference date to when it is used (sweep_ext gate_components)
 
 
 def _default_loader(symbols: list[str]) -> pd.DataFrame:
@@ -91,6 +99,12 @@ def _gates(k: dict, index: pd.DatetimeIndex) -> pd.Series:
     if k.get("ad_ma") is not None:
         ad = x["#NYSEAD"]
         g = g * flag(ad < ad.rolling(int(k["ad_ma"])).mean(), float(k.get("ad_low", 0.5)))
+    if k.get("pcr_pct") is not None:
+        p = x["#CBOEPCE"].rolling(20).mean()
+        g = g * flag(p < p.rolling(252).quantile(float(k["pcr_pct"])), float(k.get("pcr_low", 0.5)))
+    if k.get("nfci_gt") is not None:
+        n = x["#NFCI"].shift(NFCI_LAG_DAYS)          # shifted on the trading calendar, after alignment
+        g = g * flag(n > float(k["nfci_gt"]), float(k.get("nfci_low", 0.5)))
     return g
 
 

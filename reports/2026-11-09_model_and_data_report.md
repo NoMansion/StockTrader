@@ -665,3 +665,45 @@ The change is two numbers in config.yaml: `data.liquidity_band: [200, 1000]` and
 - **Checks before the switch.** The exact replay matched with zero difference, and the lagged stock + sleeve budget never went over 100% (max 98%). pytest: 131 passed. The dry run passed every safety check.
 - **What to expect tomorrow.** With today's market the new gates leave **12% in stocks** (31% under the old settings) and 86% in IEF/GLD. The A/D line is below its 100-day average and breadth is negative, so two gates are cutting at once. That is the model working as designed, but it is a large one-day shift into bonds and gold.
 - **Still running.** Round 67 tests 13 other market gates, the round 58 near misses and the IEF+TLT+GLD sleeve on the new model. Round 68 re-tunes the stock-side settings around the new gates and stress-tests double trading costs.
+
+### 8.22 Wednesday 2026-11-18, 8:30 am: rounds 67-69 read, round 70 queued
+
+Live model to beat: 1.408 stitched / 1.237 excess / 1.768 in 2000-2010 / 15.08% CAGR / -17.1% max drawdown. The bar is 1.438.
+
+- **Round 67 (13 other market gates, stock near misses, a sleeve).** Nothing reached 1.438. The closest were three gates using Norgate series: the equity put/call ratio in its top 10% (1.437, CAGR 14.4%), the Chicago Fed financial conditions index above 0 (1.434) and unemployment above its 12-month average (1.429). The round 58 stock near misses combined (fresh-entry 42 days, universe to rank 3,000, band from rank 151) scored 1.429 with CAGR 15.6%.
+- **Round 68 (stock settings around the new gates, double costs).** All 17 cells scored 1.33-1.42. The best were a 30% sector cap (1.417) and a 30-day fresh-entry window (1.416). Both are inside the noise. The stock settings did not move, so the ranker weights need no recheck. At twice the measured costs the live model scores 1.346, against 1.303 for the previous model.
+- **Round 69 (stacking the three gates, neighbour checks).**
+
+  | Cell | Stitched | Excess | 2000-2010 | 2010+ | CAGR | Max DD | Worst year |
+  |---|---|---|---|---|---|---|---|
+  | Put/call + financial conditions + round 58 stock combo | **1.479** | 1.299 | 1.962 | 1.171 | 15.08% | -16.8% | -10.1% |
+  | Put/call + financial conditions | 1.461 | 1.277 | 1.890 | 1.193 | 14.6% | -17.1% | -10.7% |
+  | Put/call cut at top 20% | 1.454 | 1.265 | 1.858 | 1.202 | 14.1% | -17.8% | -10.7% |
+  | Put/call cut at top 5% | 1.442 | 1.263 | 1.807 | 1.215 | 14.8% | -17.1% | -10.7% |
+  | Financial conditions + unemployment | 1.439 | 1.251 | 1.890 | 1.175 | 14.0% | -17.1% | -10.7% |
+  | Financial conditions above -0.25 | 1.437 | 1.262 | 1.883 | 1.178 | 15.1% | -17.6% | -11.0% |
+  | All three gates | 1.436 | 1.239 | 1.893 | 1.157 | 13.3% | -17.1% | -10.7% |
+  | Put/call + unemployment | 1.431 | 1.234 | 1.881 | 1.158 | 13.3% | -17.1% | -10.7% |
+  | Financial conditions above +0.25 | 1.410 | 1.239 | 1.773 | 1.189 | 15.1% | -17.1% | -10.7% |
+
+- **Reading.** The new gates mostly lower volatility rather than raise returns: Sharpe goes up while CAGR stays flat or drops, and the gains come from the 2000s. The best cell clears the Sharpe bar by +0.071, and its 2000s, excess Sharpe, drawdown and worst year are all better. But its CAGR is 15.078% against 15.084%. That is flat, so it fails the "CAGR up" condition. Its 2010+ Sharpe is also lower (1.171 vs 1.190), and it trails the live model in strong years such as 2013 (+17.6% vs +30.9%) and 2023 (+7.1% vs +15.5%). It does not switch.
+- **Round 70 (confirmation, queued 8:30 am, 10 runs, about 2 hours).** It checks whether the best cell sits on a plateau or a lone peak. It moves each gate setting one step with the stock combo kept (put/call 5% and 20%, financial conditions -0.25), and splits the stock combo into its two parts (fresh 42 only; universe 3,000 + band 151 only). The decision rule was set before the results: switch only to a cell that passes every promote condition, CAGR strictly up included, and only if at least 4 of the 6 cells reach 1.438. Otherwise the sweep stops. Promoting it would also need live code for the two new gates in src/exposure.py, plus tests.
+
+### 8.23 Wednesday 2026-11-18, 12:15 pm: put/call gate and wider universe promoted (rounds 70-72); sweep finished
+
+- **What changed (paper account, from tonight's 5:30 pm job).** The stock budget is also halved while the CBOE equity put/call ratio (20-day average) is in the lowest 5% of its trailing year: few puts bought means complacency. The universe widens to liquidity ranks 151-3,000 (was 201-2,500), and a name may be bought within 42 trading days of its last filing (was 21). Everything else is unchanged.
+
+  | | New | Live until today |
+  |---|---|---|
+  | Stitched Sharpe | **1.479** | 1.408 |
+  | Over T-bills | 1.304 | 1.237 |
+  | 2000-2010 / 2010+ | 1.929 / 1.196 | 1.768 / 1.190 |
+  | CAGR | 15.6% | 15.1% |
+  | Max drawdown / worst year | -16.8% / -10.1% | -17.1% / -10.7% |
+  | Under the measured cost-by-rank schedule | 1.437 (CAGR 15.1%) | 1.377 (14.7%) |
+  | At double that schedule (with the NFCI gate) | 1.404 | 1.346 |
+
+- **Round 70 (confirmation of the round 69 leader, set rule: at least 4 of 6 cells at 1.438 or better).** All 6 cleared it: put/call cut at 5% / 10% / 20% = 1.486 / 1.479 / 1.500, financial conditions threshold -0.25 = 1.491, fresh 42 alone on the old band 1.481, wider band alone 1.451. The 5% cut was the only cell that also raised CAGR (15.6%). Round 71: a 3% cut 1.453 (no cliff past 5%); the cost runs above.
+- **Round 72: NFCI left out.** Norgate's NFCI history changes every week, because the Chicago Fed re-estimates the whole index: 8,581 of 9,276 values differed between the sweep's cache and a fresh fetch, by up to 0.065, with sign flips in 1998, 2000 and 2007. So a backtest with the NFCI gate sees revised data, a mild look-ahead. Without it the leader scores 1.479 vs 1.486 with the same CAGR, drawdown and worst year, and 1.437 under measured costs. The gain was noise, so the simpler version went live. The NFCI code (`nfci_gt`, 7-trading-day lag) stays in src/exposure.py, tested but unused.
+- **Checks.** The exact replays of both versions matched with zero difference, and the lagged stock + sleeve budget peaked at 98%. The new src/exposure.py gates match the sweep's code on 26 years of real data: put/call 0 differing days, and NFCI differences only where the data was revised. pytest: 149 passed. The dry run passed every safety check: 11.3% stocks / 86.7% IEF+GLD / 2% cash (the sweep's last day: 13.6% stocks + cash), 45 stocks, 81 orders, stock turnover 25%.
+- **Sweep finished.** The follow-up rounds 63-72 found no further lead. The supervisor and workers are stopped. 870 parked runs stay parked.

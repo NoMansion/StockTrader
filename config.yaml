@@ -10,7 +10,7 @@ data:
   # "norgate"   = point-in-time index constituents incl. delisted (Platinum+)
   # "static"    = hand list in universe.py (or universe_csv) — survivorship-biased
   universe: "liquidity"
-  liquidity_top_k: 2500          # universe = top-2500 by dollar volume; the band below picks ranks 201-2500
+  liquidity_top_k: 3000          # universe = top-3000 by dollar volume; the band below picks ranks 151-3000
   # Trade only liquidity ranks lo+1..hi of that universe (null = trade the whole top-K). The exposure
   # gates still read the full top-K index. Sweep 2026-11-10: the SUE + FCF-yield ranker on ranks
   # 451-1000 (1.06 stitched Sharpe, 0.89 over T-bills) beat the best top-450 model (1.00 / 0.84);
@@ -29,7 +29,9 @@ data:
   # Altman-Z screen) = stitched 1.357 vs 1.188 for the old ranks 201-1000 model; under a trading cost MEASURED by
   # liquidity rank (high-low spread estimator: ranks 2001-2500 pay +16 bps in 2000-04, +6-7 bps since 2010)
   # 1.333 vs 1.183, at double that spread excess still ahead. Ranks 201-3000 tie (1.334) with a deeper drawdown.
-  liquidity_band: [200, 2500]
+  # Since 2026-11-18 (rounds 67-72): ranks 151-3000 together with fresh_entry_days 42 and the put/call gate (see
+  # portfolio.exposure): stitched 1.479 vs 1.408, 1.437 vs 1.377 under the measured cost-by-rank schedule.
+  liquidity_band: [150, 3000]
   min_price: 5.0
   index_name: "Russell 1000"     # only used when universe: norgate
   universe_csv: null
@@ -80,8 +82,9 @@ portfolio:
   # Optional: don't rebuy a name within N days of exiting it (reduces whipsaw)
   reentry_cooldown_days: 10
   # A name not held may only be bought within N trading days of its last filing (the day its SUE changed); held
-  # names are unaffected. null = off. Round 51: 21 days (14 / 30 neighbours agree).
-  fresh_entry_days: 21
+  # names are unaffected. null = off. Round 51: 21 days (14 / 30 neighbours agree). 42 since 2026-11-18 (with the
+  # wider band and the put/call gate; fresh 42 alone on the old band: 1.481 with the gates).
+  fresh_entry_days: 42
   # Sector rule on the top-N selection (GICS level 1, src/sectors.py); null = off
   #   "equal"  equal number of names per sector, leftovers from the overall ranking
   #   "cap"    plain ranking, but no sector takes more than sector_cap of the slots (0.25 = 11 of 45)
@@ -97,7 +100,13 @@ portfolio:
   # Stitched Sharpe 1.408 vs 1.348 for the previous settings in the same build (2000s 1.768
   # vs 1.760, CAGR 15.1% vs 14.7%, max drawdown -17.1% vs -21.8%); all 10 neighbour cells
   # 1.377-1.421. Under the measured cost-by-rank schedule 1.377 vs 1.324.
-  exposure: {vt: 15, vt_win: 10, ret_days: 252, ret_low: 0.5, hl_days: 5, ad_ma: 100}
+  # Since 2026-11-18 (rounds 67-72): also halved while the CBOE equity put/call ratio (20-day average) is in the
+  # lowest 5% of its trailing year (complacency). With ranks 151-3000 and fresh entry 42: stitched 1.479 vs 1.408,
+  # excess 1.304 vs 1.237, 2000s 1.929 vs 1.768, CAGR 15.6% vs 15.1%, max DD -16.8% vs -17.1%, worst year -10.1%
+  # vs -10.7%; under the measured cost-by-rank schedule 1.437 vs 1.377, at double that 1.404 vs 1.346 (with NFCI).
+  # Neighbours (put/call 3/5/10/20%, NFCI variants, each half of the stock change) 1.45-1.50. The NFCI gate
+  # (src/exposure.py nfci_gt) added only +0.007 and its history is revised weekly, so it is left off.
+  exposure: {vt: 15, vt_win: 10, ret_days: 252, ret_low: 0.5, hl_days: 5, ad_ma: 100, pcr_pct: 0.05}
   # Idle-cash sleeve (src/sleeve.py): cash above cash_buffer that the exposure layer leaves
   # uninvested goes into these ETFs. Sweep: always-equal IEF+GLD = +0.14 Sharpe, +2.8 pts CAGR
   # over 26 years, worst year -12%. null = off (cash stays cash).

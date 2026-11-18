@@ -102,3 +102,49 @@ def test_gate_loader_is_not_called_without_gate_keys(monkeypatch):
     close = _panel(vol=0.002)
     exposure_series({"vt": 15, "ret_days": 252, "ret_low": 0.5}, close, None)
     exposure_series("ret12mhalf_vt15", close, None)
+
+
+def _fake_macro(close, pcr=None, nfci=None):
+    idx = close.index
+    data = {"#CBOEPCE": pcr if pcr is not None else pd.Series(0.6, index=idx),
+            "#NFCI": nfci if nfci is not None else pd.Series(-0.5, index=idx)}
+    return lambda symbols: pd.DataFrame(data)[symbols]
+
+
+def test_put_call_gate_halves_exposure_when_the_ratio_sits_in_its_low_tail(monkeypatch):
+    import src.exposure as ex
+    close = _panel(vol=0.002)
+    rng = np.random.default_rng(1)
+    pcr = pd.Series(0.6 + rng.normal(0, 0.05, len(close)), index=close.index)
+    pcr.iloc[-30:] = 0.2                                      # complacency: far below a year of history
+    monkeypatch.setattr(ex, "EXT_LOADER", _fake_macro(close, pcr=pcr))
+    e = exposure_series({"pcr_pct": 0.05}, close, None)
+    assert e.iloc[-1] == pytest.approx(0.5) and e.iloc[-60] == pytest.approx(1.0)
+    assert exposure_series({"pcr_pct": 0.05, "pcr_low": 0.0}, close, None).iloc[-1] == pytest.approx(0.0)
+    p20 = pcr.rolling(20).mean()                              # same rule written out
+    want = np.where(p20 < p20.rolling(252).quantile(0.05), 0.5, 1.0)
+    assert np.allclose(e.values, want)
+
+
+def test_nfci_gate_uses_the_value_seven_trading_days_old(monkeypatch):
+    import src.exposure as ex
+    close = _panel(vol=0.002)
+    nfci = pd.Series(-0.5, index=close.index)
+    turn = close.index[-20]
+    nfci.loc[turn:] = 0.4                                     # conditions tighten from `turn`
+    monkeypatch.setattr(ex, "EXT_LOADER", _fake_macro(close, nfci=nfci))
+    e = exposure_series({"nfci_gt": 0.0}, close, None)
+    i = close.index.get_loc(turn)
+    assert e.iloc[i + 6] == pytest.approx(1.0)                # not yet published
+    assert e.iloc[i + 7] == pytest.approx(0.5) and e.iloc[-1] == pytest.approx(0.5)
+    assert exposure_series({"nfci_gt": 0.5}, close, None).iloc[-1] == pytest.approx(1.0)
+
+
+def test_weekly_nfci_is_forward_filled_onto_trading_days(monkeypatch):
+    import src.exposure as ex
+    close = _panel(vol=0.002)
+    fridays = close.index[close.index.dayofweek == 4]
+    nfci = pd.Series(0.3, index=fridays)                      # weekly series, positive throughout
+    monkeypatch.setattr(ex, "EXT_LOADER", lambda symbols: pd.DataFrame({"#NFCI": nfci})[symbols])
+    e = exposure_series({"nfci_gt": 0.0}, close, None)
+    assert e.iloc[20:].eq(0.5).all()
