@@ -66,6 +66,15 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   section 3.1. The download reaches about 9,000 markets an hour when Kalshi is not throttling.
 - Sample split fixed at 2026-04-01 (see rule 2 above). Account replay simulator added (`research/portfolio.py`).
 
+- 17:55 (check-in 1): round `r02_economics_2760`, report 3.2. 0 pass, 19 leads (all "buy NO", not significant in
+  sample, concentrated in "above X" markets of 2025-26), 18 reliably losing (taker YES on favourites; taker NO
+  against longshots). Engine gained fixed-horizon snapshots (family 1b) and an event-weighted statistic; `pass`
+  now needs both weightings. Both background jobs alive (download at Economics bars 3,000 of 4,000; bot listing
+  partial).
+- New backlog items from r02: (a) test "buy NO at 20-80c" and "favourites lose" in every other category as it
+  lands; (b) split by strike_type greater / less / between wherever "less" exists; (c) year-by-year table for
+  any lead; (d) does the favourite loss shrink with a resting entry and near the close?
+
 ## How to run a round
 
 ```

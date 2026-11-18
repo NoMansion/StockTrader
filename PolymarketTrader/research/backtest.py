@@ -30,10 +30,12 @@ class Sample:
     t: float = float("nan")
     win: float = float("nan")
     cost: float = float("nan")
+    ev_ret: float = float("nan")        # every event counted once, however many markets it has
+    ev_t: float = float("nan")
 
     def cells(self, prefix: str) -> dict:
         return {f"{prefix}_n": self.n, f"{prefix}_events": self.events, f"{prefix}_ret": self.ret, f"{prefix}_t": self.t,
-                f"{prefix}_win": self.win, f"{prefix}_cost": self.cost}
+                f"{prefix}_win": self.win, f"{prefix}_cost": self.cost, f"{prefix}_evret": self.ev_ret, f"{prefix}_evt": self.ev_t}
 
 
 class Panel:
@@ -80,8 +82,14 @@ class Panel:
         sums = np.bincount(ev, weights=x - mean, minlength=self.n_events)
         k = int((np.bincount(ev, minlength=self.n_events) > 0).sum())
         se = np.sqrt((sums ** 2).sum()) / n * (np.sqrt(k / (k - 1)) if k > 1 else np.nan)
+        counts = np.bincount(ev, minlength=self.n_events)
+        present = counts > 0
+        per_event = np.bincount(ev, weights=x, minlength=self.n_events)[present] / counts[present]
+        ev_mean = float(per_event.mean())
+        ev_se = float(per_event.std(ddof=1) / np.sqrt(k)) if k > 1 else float("nan")
         return Sample(n=n, events=k, ret=float(mean), t=float(mean / se) if se and se > 0 else float("nan"),
-                      win=float(pay[rows].mean()), cost=float(px[rows].mean()))
+                      win=float(pay[rows].mean()), cost=float(px[rows].mean()), ev_ret=ev_mean,
+                      ev_t=ev_mean / ev_se if ev_se and ev_se > 0 else float("nan"))
 
     def evaluate(self, mask: np.ndarray, side: str, entry: str, once: bool = True) -> tuple[Sample, Sample]:
         """(in sample, out of sample) for the rule 'when mask holds, buy `side` by `entry`'."""
@@ -116,7 +124,9 @@ def verdict(r: dict, min_events: int = 100, t_oos: float = 3.0, t_is: float = 2.
     """The promotion test from STATE.md. 'pass' needs both halves positive and significant on enough events."""
     if r["oos_events"] < min_events or r["is_events"] < min_events:
         return "thin"
-    if r["is_ret"] > 0 and r["oos_ret"] > 0 and r["is_t"] >= t_is and r["oos_t"] >= t_oos:
+    # both weightings must agree: per bet (clustered by event) and per event (a 20-rung ladder counts once)
+    if (r["is_ret"] > 0 and r["oos_ret"] > 0 and r["is_t"] >= t_is and r["oos_t"] >= t_oos
+            and r.get("is_evret", 1) > 0 and r.get("oos_evt", 9) >= 2.0):
         return "pass"
     if r["is_ret"] > 0 and r["oos_ret"] > 0 and r["oos_t"] >= 2.0:
         return "lead"

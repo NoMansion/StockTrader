@@ -68,7 +68,8 @@ def main() -> int:
     out.round(5).to_csv(path, index=False)
     print(f"\n{len(out)} rules in {time.time() - t0:.0f} s -> {path}")
     print("verdicts:", out["verdict"].value_counts().to_dict())
-    show = ["family", "rule", "side", "entry", "is_events", "is_ret", "is_t", "oos_events", "oos_ret", "oos_t", "oos_win", "oos_cost", "fill"]
+    show = ["family", "rule", "side", "entry", "is_events", "is_ret", "is_t", "is_evret", "oos_events", "oos_ret", "oos_t",
+            "oos_evret", "oos_evt", "oos_win", "oos_cost", "fill"]
     pd.set_option("display.width", 250, "display.max_colwidth", 70, "display.max_rows", 200)
     for v, title in (("pass", "PASS (both halves positive, out-of-sample t >= 3)"), ("lead", "LEADS (out-of-sample t >= 2)"),
                      ("loses", "RELIABLY LOSING")):

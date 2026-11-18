@@ -46,6 +46,12 @@ class Features:
         self.month = (np.asarray(d["ts"].to_numpy("int64"), "datetime64[s]").astype("datetime64[M]").astype(int) % 12 + 1)
         self.base = self.q & (self.dte > 0.25) & (self.spread <= 0.10)                     # a tradable, live quote
 
+    def snapshot(self, days: float) -> np.ndarray:
+        """One bar per market: the first tradable bar with `days` or fewer left. Unlike "the first bar at which the
+        price is in a band", this does not depend on the path the price took, so it measures calibration of the
+        price LEVEL at a fixed horizon and nothing else."""
+        return np.isin(np.arange(self.p.n), self.p.first_per_market(self.base & (self.dte <= days)))
+
     def price(self, lo, hi):
         return (self.mid >= lo) & (self.mid < hi)
 
@@ -68,6 +74,21 @@ def f_calibration(f: Features):
         c = f.cat == cat
         for (lo, hi), side, entry in itertools.product(PRICE, SIDES, ENTRIES):
             yield "1 calibration x category", f"{cat}: mid {name_range(lo * 100, hi * 100, 'c')}", f.base & c & f.price(lo, hi), side, entry
+
+
+# 1b. The same question asked cleanly: the price at a fixed number of days before close, whatever came before
+def f_snapshot(f: Features):
+    for h in (1, 3, 7, 14, 30, 60):
+        snap = f.snapshot(h)
+        for (lo, hi), side, entry in itertools.product(PRICE, SIDES, ENTRIES):
+            yield "1b snapshot", f"{h}d before close: mid {name_range(lo * 100, hi * 100, 'c')}", snap & f.price(lo, hi), side, entry
+        for lo, hi in ((0.0, 0.5), (0.5, 1.0), (0.2, 0.8)):
+            for side, entry in itertools.product(SIDES, ENTRIES):
+                yield "1b snapshot", f"{h}d before close: mid {name_range(lo * 100, hi * 100, 'c')}", snap & f.price(lo, hi), side, entry
+    for h, cat in itertools.product((3, 14), f.cats):
+        snap = f.snapshot(h) & (f.cat == cat)
+        for (lo, hi), side, entry in itertools.product([(0.03, 0.2), (0.2, 0.5), (0.5, 0.8), (0.8, 0.97)], SIDES, ENTRIES):
+            yield "1b snapshot x category", f"{cat}, {h}d before close: mid {name_range(lo * 100, hi * 100, 'c')}", snap & f.price(lo, hi), side, entry
 
 
 # 2. Favourites near expiry ("bonds")
@@ -185,6 +206,7 @@ def f_combos(f: Features):
 
 def all_rules(f: Features, titles: np.ndarray):
     yield from f_calibration(f)
+    yield from f_snapshot(f)
     yield from f_bonds(f)
     yield from f_always_no(f)
     yield from f_momentum(f)

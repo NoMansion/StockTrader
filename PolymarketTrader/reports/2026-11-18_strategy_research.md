@@ -4,7 +4,12 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-- **No strategy has passed yet.** The first sweep ran on a sample too small to judge (section 3.1).
+- **No strategy has passed.** Two rounds so far, both on Economics only (sections 3.1 and 3.2).
+- **The clearest finding is about what loses.** In Economics markets, paying the ask for the favourite (contracts
+  priced 50 cents and up) lost 9 to 14% per dollar before April 2026 and 18 to 24% after, and selling longshots
+  lost too. The "safe" plays the research literature recommends on other venues did not work here.
+- **The profitable-looking mirror (buying No) is a lead, not a result.** It rests on "above X" markets in 2025
+  and 2026, half of them weekly gas prices, and lost in 2023 and 2024.
 - **Data is still downloading.** Kalshi's public API throttles hard; the non-sports history will take most of a
   night. Sweeps are rerun as each category lands.
 - **What can and cannot be tested this way.** Rules on prices, time, category and market structure can be
@@ -76,3 +81,46 @@ I traced the losing bets to the raw bars. They are real: mostly weekly and month
 markets in mid-2026, where prices swung from the 90s to single digits within days. It is 65 events concentrated
 in two series and one volatile stretch. If favourites in economic-data markets are really overpriced, it will
 show up again in the full Economics sample and in other categories.
+
+### 3.2 Round r02, Economics, 2,537 markets (17:55 UTC)
+
+Data: 2,537 Economics markets in 655 events, 208,946 daily bars, closing 2021-08 to 2026-09; 935 markets out of
+sample. Two things were added to the engine first: a fixed-horizon snapshot (family 1b: the price a set number of
+days before close, whatever path it took), and an event-weighted statistic that counts a 20-rung ladder once.
+
+Result: 2,017 rules. **0 pass, 19 leads, 18 reliably lose**, 344 no, 1,636 still thin.
+
+**What reliably loses** (negative on both sides of the split, both weightings):
+
+| Rule (taker entries) | In sample | t | Out of sample | t | Events in / out |
+|---|---|---|---|---|---|
+| YES at 50c or more, 60 days before close | −13.6% | −4.7 | −23.8% | −4.8 | 327 / 110 |
+| YES at 50c or more, 30 days before close | −9.3% | −3.3 | −20.3% | −4.4 | 335 / 115 |
+| YES at 50c or more, 7 days before close | −9.7% | −3.6 | −18.1% | −3.7 | 324 / 115 |
+| YES at 80 to 90c, first time there | −8.7% | −3.5 | −15.7% | −3.6 | 305 / 108 |
+| YES at 80c or more, 30 days or less to go, tight spread | −4.1% | −2.1 | −10.4% | −3.4 | 297 / 109 |
+| NO against a 5 to 10c longshot | −4.3% | −2.4 | −9.2% | −4.5 | 312 / 123 |
+| NO against a 5 to 20c longshot quoted 6 to 15c wide | −5.9% | −3.2 | −12.8% | −4.5 | 283 / 112 |
+
+Both ends of the price range are overconfident in this category: favourites win less often than their price, and
+longshots come in more often than theirs. Fees and spread explain only 2 to 4 points of these losses. For the
+paper bot this matters directly: the README's "lean to favourites" came from studies of other venues and is
+wrong for Kalshi Economics on this evidence. Nothing in the bot's config depended on it (it trades 15 to 85
+cents on Claude's disagreement with the price), so nothing changes yet.
+
+**The leads all point one way: buy NO.** For example NO at 20 to 80 cents taken 30 days before close: +2.7% in
+sample (t 0.5), +22.9% out of sample (t 2.3). None is significant in sample. Breaking the 7-day snapshot down:
+
+- by strike type: the effect is in "above X" markets (588 of 723 bets); there are almost no "below X" markets
+  to compare with, so a bias toward YES cannot be told apart from numbers simply coming in low;
+- by series: weekly gas prices are a quarter of the bets and return +47%; payrolls return −7%;
+- by year: NO lost in 2023 (−16%) and 2024 (−13%) and won in 2022, 2025 and 2026.
+
+So this is a lead with a plausible boring explanation (gas prices and inflation prints came in below what markets
+expected through 2025 and 2026). It gets tested where that explanation cannot apply: other categories, and
+"below X" markets when enough exist.
+
+**Momentum:** fading a rise (NO after +3 to +5 cents in a day) and following a fall both show up as leads out of
+sample and nothing in sample. They are the same NO tilt wearing a different name, not evidence about momentum.
+
+**Still thin:** every price × days cell, the ladders (10 rules), persistence (7), and all combinations.
