@@ -137,8 +137,14 @@ def test_price_drift(ledger, market):
     ledger.add_snapshot("m1", 0.59, 0.61, 0.60, ts=1000.0 + 72 * 3600 + 10)
     rep = scoring.price_drift(ledger, horizon_hours=72)
     assert rep.n == 1 and rep.toward == 1 and rep.mean_capture == pytest.approx(0.5)
+    # a later forecast of the same market is not a second, independent observation
+    ledger.add_forecast({"market_id": "m1", "p_yes": 0.80, "market_mid": 0.50, "ts": 1001.0})
+    assert scoring.price_drift(ledger, horizon_hours=72).n == 1
+    assert scoring.price_drift(ledger, horizon_hours=72, first_only=False).n == 2
     # a forecast that agrees with the market is not counted
-    ledger.add_forecast({"market_id": "m1", "p_yes": 0.51, "market_mid": 0.50, "ts": 1001.0})
+    ledger.upsert_market({**market, "market_id": "m2", "yes_token": "m2-y", "no_token": "m2-n"})
+    ledger.add_forecast({"market_id": "m2", "p_yes": 0.51, "market_mid": 0.50, "ts": 1001.0})
+    ledger.add_snapshot("m2", 0.5, 0.52, 0.51, ts=1001.0 + 73 * 3600)
     assert scoring.price_drift(ledger, horizon_hours=72).n == 1
 
 

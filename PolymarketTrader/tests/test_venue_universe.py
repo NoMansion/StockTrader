@@ -112,6 +112,12 @@ def test_prefilter(kw, word):
     assert (why == "") if not word else (word in why)
 
 
+def test_market_without_any_category_is_not_traded():
+    m = mk()
+    m.category, m.tags = None, []
+    assert "no category" in universe.prefilter(m, ST, NOW)
+
+
 def test_prefilter_needs_an_end_date_and_respects_the_allow_list():
     m = mk()
     m.end_ts = None

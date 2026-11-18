@@ -5,7 +5,7 @@ small bet. It runs on **paper only** for now, against live prices from Polymarke
 to US residents). No keys, no wallet and no money are involved until the paper record passes the gates in
 `docs/GO_LIVE.md`.
 
-Status, 2026-11-18: built and unit-tested (116 tests) in a cloud session that could not reach the exchange. **It
+Status, 2026-11-18: built and unit-tested (128 tests) in a cloud session that could not reach the exchange. **It
 has not yet run against real market data.** The first run on the PC is the first real test; see "Not yet verified".
 
 ## What the research says (and how the design follows)
@@ -59,7 +59,7 @@ available to it: no shell, no files, no order code. Whatever a web page says to 
 | Daily budget | 6 orders and 10% of equity per 24 hours | `safety` |
 | Drawdown | 15% from the peak: no new positions until reviewed | `safety.max_drawdown` |
 | Total loss | 25% of the money deposited: the experiment stops | `safety.max_total_loss` |
-| Kill switch | create the file `data/STOP`; delete it to resume | `safety.kill_switch` |
+| Kill switch | create the file `data/STOP` (`STOP.txt` also counts); checked at the start of a cycle and again before every order; cancels resting orders; delete it to resume | `safety.kill_switch` |
 | Real money | not implemented; `account.mode: live` refuses to start | `src/broker.py` |
 
 A model should never be able to raise its own limits. These live in `config.yaml` and `src/safety.py`, are checked
@@ -71,7 +71,7 @@ Run in PowerShell from the project folder.
 
 | Step | Command | What it shows |
 |---|---|---|
-| 1. Install, test, demo | `Set-ExecutionPolicy -Scope Process Bypass; .\setup.ps1` | 116 tests pass; a made-up month of trading prints a status report |
+| 1. Install, test, demo | `Set-ExecutionPolicy -Scope Process Bypass; .\setup.ps1` | 128 tests pass; a made-up month of trading prints a status report |
 | 2. Look at the real market list | `.venv\Scripts\python scripts\run_cycle.py --scan` | How many live markets pass the filters, and why the rest are dropped. Changes nothing, calls Claude zero times. **This is the first contact with the real exchange: expect surprises here.** |
 | 3. One real paper cycle | `.venv\Scripts\python scripts\run_cycle.py` | Up to 4 markets forecast by Claude (several minutes), any paper orders placed |
 | 4. Status | `.venv\Scripts\python scripts\status.py` | Account, positions, forecast scoring, go-live gates |
@@ -113,7 +113,8 @@ use it only with a reason.
    show up in the win rate. A good or bad month means little.
 
 Paper results will flatter reality. The simulator is deliberately pessimistic (resting orders fill only when the
-price moves against them; positions are valued at the bid), but one published comparison of the same strategy on
+price moves against them, and an order left resting in a market that closes against it is counted as filled;
+positions are valued at the bid), but one published comparison of the same strategy on
 the same venue showed +49.8% on paper and +5.9% for real.
 
 ## Not yet verified
@@ -123,7 +124,9 @@ wire. The first `--scan` on the PC will show which of these need a fix:
 
 - **Field names** for a market's end date, rules text and category beyond the ones the SDK declares
   (`src/venue.py` tries several spellings and treats a missing end date or rules text as "do not trade").
-- **Category labels** the exchange actually uses, which the deny list in `config.yaml` must match.
+- **Category labels** the exchange actually uses, which the deny list in `config.yaml` must match. A market with
+  no category or tags at all is not traded, so if the scan drops everything for "no category or tags", the field
+  mapping in `src/venue.py` is the thing to fix.
 - **Settlement**: what the settlement endpoint returns before a market has settled. The bot only settles a market
   the exchange reports as closed, and only at a payout of exactly 0, 0.5 or 1.
 - **Fees, tick size, minimum order size**: `fees.taker_rate` (0.095) and `execution.tick` (0.01) come from
@@ -154,7 +157,7 @@ src/scoring.py        Brier vs market, price movement, P&L, go-live gates
 src/trader.py         the cycle
 src/runtime.py        lock, quiet hours, priority, memory check
 scripts/              run_cycle.py, status.py, demo_offline.py
-tests/                116 tests, all offline
+tests/                128 tests, all offline
 reports/              the research report
 research_notes/       the six sets of notes behind it
 docs/GO_LIVE.md       what has to be true before real money, and how to do it then

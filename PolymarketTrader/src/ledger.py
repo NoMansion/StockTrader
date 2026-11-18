@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS markets (
     market_id TEXT PRIMARY KEY, condition_id TEXT, slug TEXT, question TEXT, rules TEXT,
     event_id TEXT, event_title TEXT, category TEXT, end_ts REAL, neg_risk INTEGER DEFAULT 0,
     yes_token TEXT, no_token TEXT, first_seen REAL, last_seen REAL,
-    closed INTEGER DEFAULT 0, resolved_ts REAL, payout_yes REAL          -- 1, 0 or 0.5 once resolved
+    closed INTEGER DEFAULT 0, resolved_ts REAL, payout_yes REAL,         -- 1, 0 or 0.5 once resolved
+    checked_ts REAL                                                      -- last time resolution was looked up
 );
 CREATE TABLE IF NOT EXISTS snapshots (
     id INTEGER PRIMARY KEY, ts REAL, market_id TEXT, bid REAL, ask REAL, mid REAL,
@@ -147,6 +148,10 @@ class Ledger:
             return self.one("SELECT * FROM snapshots WHERE market_id=? ORDER BY ts DESC LIMIT 1", (market_id,))
         return self.one("SELECT * FROM snapshots WHERE market_id=? AND ts<=? ORDER BY ts DESC LIMIT 1", (market_id, before))
 
+    def set_checked(self, market_id: str, ts: float) -> None:
+        self.db.execute("UPDATE markets SET checked_ts=? WHERE market_id=?", (ts, market_id))
+        self.db.commit()
+
     def mark_resolved(self, market_id: str, payout_yes: float, ts: float | None = None) -> None:
         self.db.execute("UPDATE markets SET closed=1, resolved_ts=?, payout_yes=? WHERE market_id=?",
                         (ts or time.time(), float(payout_yes), market_id))
@@ -201,9 +206,11 @@ class Ledger:
         return self.q("SELECT * FROM positions WHERE shares > 0.000001 ORDER BY opened_ts")
 
     def apply_fill(self, order_id: int | None, market_id: str, token_id: str, outcome: str, side: str,
-                   price: float, shares: float, fee: float = 0.0, ts: float | None = None) -> None:
+                   price: float, shares: float, fee: float = 0.0, ts: float | None = None,
+                   order_status: str | None = None, order_note: str | None = None) -> None:
         """Record a fill and move cash and the position together. BUY adds shares at cost price*shares + fee;
-        SELL removes shares, credits price*shares - fee and releases cost in proportion."""
+        SELL removes shares, credits price*shares - fee and releases cost in proportion. `order_status` updates
+        the order in the same transaction, so a crash cannot leave a filled order looking unfilled."""
         ts = ts or time.time()
         side = side.upper()
         with self.tx():
@@ -223,8 +230,13 @@ class Ledger:
                 self._move_cash(price * shares - fee, f"sell {outcome} {market_id}", ts)
                 cost = cost * max(have - shares, 0.0) / have if have > 0 else 0.0
                 have = max(have - shares, 0.0)
+                if have < 0.005:                                 # under half a cent of a share is rounding, not a position
+                    have, cost = 0.0, 0.0
             else:
                 raise ValueError(f"unknown side {side!r}")
+            if order_status is not None and order_id is not None:
+                self.db.execute("UPDATE orders SET status=?, note=COALESCE(?, note) WHERE id=?",
+                                (order_status, order_note, order_id))
             self.db.execute(
                 """INSERT INTO positions (token_id, market_id, outcome, shares, cost, opened_ts, updated_ts)
                    VALUES (?,?,?,?,?,?,?)
@@ -263,7 +275,7 @@ class Ledger:
                 out["market"] += c
             if event_id and r["event_id"] == event_id:
                 out["event"] += c
-            if category and r["category"] == category:
+            if category is not None and (r["category"] or "") == category:
                 out["category"] += c
         return out
 

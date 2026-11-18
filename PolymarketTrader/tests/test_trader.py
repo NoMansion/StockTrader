@@ -261,10 +261,102 @@ def test_live_mode_refuses(ledger, tmp_path, monkeypatch):
         Trader(cfg(account={"mode": "live"}), ledger, PolymarketUS(FakeExchange(NOW), min_interval=0), TableForecaster({}))
 
 
-def test_resting_order_is_cancelled_when_the_market_closes_unsettled(ledger, tmp_path):
+def test_market_closing_against_a_resting_order_counts_as_a_fill(ledger, tmp_path):
+    """Between two cycles the event happens the wrong way and the market closes. A real resting bid would have
+    been hit on the way down, so the paper account takes that loss too."""
+    ex, fc, tr = setup(ledger, tmp_path, {"cpi-above-3": 0.70})
+    run(tr)                                            # resting buy YES at 0.49
+    ex.close("cpi-above-3")                            # closed, settlement not published yet
+    r = run(tr, NOW + 30 * H)                          # past the order's 24 h life: it must NOT quietly expire
+    assert ledger.q("SELECT status FROM orders")[0]["status"] == "resting"
+    assert fc.asked == ["cpi-above-3"]                 # a closed market is not forecast again
+    ex.close("cpi-above-3", settlement=0.0)            # YES lost
+    r = run(tr, NOW + 40 * H)
+    o = ledger.q("SELECT * FROM orders")[0]
+    assert o["status"] == "filled" and any("assumed filled" in line for line in r.log)
+    assert ledger.cash() == pytest.approx(1000.0 - o["shares"] * 0.49)
+    assert ledger.positions() == []
+
+
+def test_market_closing_in_favour_of_a_resting_order_counts_as_no_fill(ledger, tmp_path):
     ex, fc, tr = setup(ledger, tmp_path, {"cpi-above-3": 0.70})
     run(tr)
-    ex.close("cpi-above-3")
+    ex.close("cpi-above-3", settlement=1.0)            # YES won: nobody sold us the winner at 0.49
     run(tr, NOW + 4 * H)
     assert ledger.q("SELECT status FROM orders")[0]["status"] == "cancelled"
-    assert fc.asked == ["cpi-above-3"]                 # and a closed market is not forecast again
+    assert ledger.cash() == pytest.approx(1000.0)
+    assert ledger.market("cpi-above-3")["payout_yes"] == 1.0
+
+
+def test_held_market_with_a_one_sided_book_does_not_crash_the_cycle(ledger, tmp_path):
+    ex = FakeExchange(NOW).add("cpi-above-3").add("gdp")
+    ex, fc, tr = setup(ledger, tmp_path, {"cpi-above-3": 0.75, "gdp": 0.75}, ex=ex, execution={"style": "taker"})
+    run(tr)
+    assert len(ledger.positions()) == 2
+    ex._books["cpi-above-3"]["marketData"]["offers"] = []          # the asks vanish
+    r = run(tr, NOW + 49 * H)
+    assert r.status == "ok" and any("no two-sided market" in line for line in r.log)
+    assert fc.asked.count("gdp") == 2                               # the other market is still looked after
+
+
+def test_every_forecast_market_gets_its_outcome_recorded_even_if_never_traded(ledger, tmp_path):
+    ex, fc, tr = setup(ledger, tmp_path, {"cpi-above-3": 0.52})     # forecast, no trade
+    run(tr)
+    ex.set_book("cpi-above-3", 0.91, 0.93)                          # price leaves the tradable band for good
+    for day in (2, 5, 9, 12):
+        run(tr, NOW + day * 24 * H)
+    assert ledger.market("cpi-above-3")["payout_yes"] is None
+    ex.close("cpi-above-3", settlement=1.0)
+    run(tr, NOW + 21 * 24 * H)
+    assert ledger.market("cpi-above-3")["payout_yes"] == 1.0
+    from src import scoring
+    assert scoring.brier_vs_market(ledger).n == 1
+
+
+def test_kill_switch_created_during_the_forecast_blocks_the_order(ledger, tmp_path):
+    (tmp_path / "data").mkdir()
+    ex, fc, tr = setup(ledger, tmp_path, {"cpi-above-3": 0.70},
+                       on_call=lambda m: (tmp_path / "data" / "STOP.txt").write_text("stop"))   # Notepad adds .txt
+    r = run(tr)
+    assert r.status == "stopped" and ledger.q("SELECT * FROM orders") == []
+    assert "kill switch" in ledger.q("SELECT reason FROM decisions")[0]["reason"]
+
+
+def test_kill_switch_stops_a_resting_order_from_filling(ledger, tmp_path):
+    ex, fc, tr = setup(ledger, tmp_path, {"cpi-above-3": 0.70})
+    run(tr)
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "STOP").write_text("stop")
+    ex.set_book("cpi-above-3", 0.47, 0.49)                          # the price comes to the order
+    run(tr, NOW + 4 * H)
+    assert ledger.positions() == [] and ledger.q("SELECT status FROM orders")[0]["status"] == "cancelled"
+
+
+def test_position_awaiting_settlement_keeps_its_last_price(ledger, tmp_path):
+    ex, fc, tr = setup(ledger, tmp_path, {"cpi-above-3": 0.75}, execution={"style": "taker"})
+    r1 = run(tr)
+    ex.close("cpi-above-3")                                         # closed, no settlement yet, no book
+    r2 = run(tr, NOW + 30 * 24 * H)
+    assert r2.status == "ok"
+    assert r2.stats["equity"] == pytest.approx(r1.stats["equity"], abs=0.01)   # not marked to zero
+
+
+def test_full_exit_leaves_no_dust(ledger, tmp_path, market):
+    from src.book import Book, simulate_sell, summarize, floor_cents
+    assert floor_cents(20.06) == 20.06 and floor_cents(20.069) == 20.06
+    book = Book.from_levels("t", bids=[(0.48, 1000)], asks=[(0.50, 1000)])
+    for shares in (20.06, 38.18, 0.07, 123.45):
+        sold, _, _ = summarize(simulate_sell(book, shares, 0.40, depth_haircut=0.5))
+        assert sold == pytest.approx(shares)
+    ledger.upsert_market(market)
+    ledger.deposit(100.0)
+    ledger.apply_fill(None, "m1", "m1-yes", "YES", "BUY", 0.5, 20.06)
+    ledger.apply_fill(None, "m1", "m1-yes", "YES", "SELL", 0.5, 20.057)
+    assert ledger.positions() == []                                 # a sliver under half a cent is not a position
+
+
+def test_config_typos_are_errors_not_silent_defaults(ledger, tmp_path):
+    for section, key in (("sizing", "max_postion_pct"), ("safety", "max_drawdwn"), ("universe", "min_liquidty")):
+        with pytest.raises(ValueError, match=key):
+            ex, fc, tr = setup(ledger, tmp_path, {}, **{section: {key: 1}})
+            run(tr)

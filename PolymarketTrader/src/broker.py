@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import time
 
-from .book import Book, simulate_buy, simulate_sell, summarize
+from .book import Book, floor_cents, simulate_buy, simulate_sell, summarize
 from .fees import FeeModel
 from .ledger import Ledger
 
@@ -47,7 +47,7 @@ class PaperBroker:
                       decision_id: int | None = None, now: float | None = None) -> int:
         """A resting limit buy of usd/price shares at `price`. No cash moves until it fills; the open amount is
         counted as exposure by the trader so two cycles cannot spend the same dollars."""
-        shares = int(usd / price * 100) / 100.0
+        shares = floor_cents(usd / price)
         return self.ledger.add_order({"ts": now or time.time(), "run_id": run_id, "mode": self.mode, "market_id": market_id,
                                       "token_id": token_id, "outcome": outcome, "side": "BUY", "limit_price": price,
                                       "usd": round(shares * price, 4), "shares": shares, "decision_id": decision_id,
@@ -61,27 +61,49 @@ class PaperBroker:
     def cancel(self, order_id: int, why: str) -> None:
         self.ledger.set_order_status(order_id, "cancelled", why)
 
-    def work_resting(self, books: dict[str, Book], category_of=None, now: float | None = None) -> list[str]:
-        """Fill, expire or keep every resting order. `books` maps token_id -> current Book."""
+    def _fill_resting(self, o, why: str, category_of=None, now: float | None = None) -> bool:
+        """Fill one resting order in full at its own price (maker). False = cancelled for lack of cash."""
+        price, shares = float(o["limit_price"]), float(o["shares"])
+        cat = category_of(o["market_id"]) if category_of else None
+        fee = self.fees.per_share(price, cat, maker=True) * shares
+        if price * shares + fee > self.ledger.cash() + 1e-6:
+            self.cancel(o["id"], "not enough cash when the price came to it")
+            return False
+        self.ledger.apply_fill(o["id"], o["market_id"], o["token_id"], o["outcome"], "BUY", price, shares, fee,
+                               ts=now, order_status="filled", order_note=why)
+        return True
+
+    def work_resting(self, books: dict[str, Book], category_of=None, now: float | None = None,
+                     closed: set[str] | None = None) -> list[str]:
+        """Fill, expire or keep every resting order. `books` maps token_id -> current Book. Orders in `closed`
+        markets are left alone here: resolve_closed() deals with them once the settlement is known."""
         now = now or time.time()
         log = []
         for o in self.resting():
+            if closed and o["market_id"] in closed:
+                continue
             book = books.get(o["token_id"])
             price, shares = float(o["limit_price"]), float(o["shares"])
             if book is not None and book.best_ask is not None and book.best_ask <= price + 1e-9:
-                cost = price * shares
-                if cost > self.ledger.cash() + 1e-6:
-                    self.cancel(o["id"], "not enough cash when the price came to it")
+                if self._fill_resting(o, f"ask came down to {book.best_ask:.3f}", category_of, now):
+                    log.append(f"{o['market_id']}: resting buy {o['outcome']} filled, {shares:g} @ {price:.3f}")
+                else:
                     log.append(f"{o['market_id']}: resting {o['outcome']} order cancelled (cash)")
-                    continue
-                cat = category_of(o["market_id"]) if category_of else None
-                fee = self.fees.per_share(price, cat, maker=True) * shares
-                self.ledger.apply_fill(o["id"], o["market_id"], o["token_id"], o["outcome"], "BUY", price, shares, fee, ts=now)
-                self.ledger.set_order_status(o["id"], "filled", f"ask came down to {book.best_ask:.3f}")
-                log.append(f"{o['market_id']}: resting buy {o['outcome']} filled, {shares:g} @ {price:.3f}")
             elif now - float(o["ts"]) > self.resting_ttl_s:
                 self.ledger.set_order_status(o["id"], "expired", "not filled within its time limit")
                 log.append(f"{o['market_id']}: resting {o['outcome']} order expired unfilled")
+        return log
+
+    def resolve_closed(self, market_id: str, payout_yes: float, category_of=None, now: float | None = None) -> list[str]:
+        """A market closed while an order was resting in it. Assume the worst: an order on the side that LOST was
+        hit on the way down (a real bid would have been), an order on the side that won was never reached."""
+        log = []
+        for o in self.resting(market_id):
+            pay = payout_yes if o["outcome"] == "YES" else 1.0 - payout_yes
+            if pay < 0.5 and self._fill_resting(o, "market closed against the order: assumed filled", category_of, now):
+                log.append(f"{market_id}: resting buy {o['outcome']} assumed filled before the market closed against it")
+            elif pay >= 0.5:
+                self.cancel(o["id"], "market closed in the order's favour: assumed never reached")
         return log
 
     # ---- exits ----------------------------------------------------------------

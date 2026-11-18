@@ -56,9 +56,27 @@ class SafetyStop(RuntimeError):
 
 
 def settings(cfg: dict | None) -> dict:
+    given = (cfg or {}).get("safety") or {}
+    unknown = sorted(set(given) - set(DEFAULTS))
+    if unknown:                                     # a misspelt limit must not silently fall back to its default
+        raise ValueError(f"unknown safety setting(s) in config: {', '.join(unknown)}")
     out = dict(DEFAULTS)
-    out.update((cfg or {}).get("safety") or {})
+    out.update(given)
     return out
+
+
+def kill_switch_on(cfg: dict | None, root: Path | str = ".") -> str | None:
+    """The kill-switch file's name if it exists. `STOP.txt` counts too: Windows editors add an extension."""
+    name = settings(cfg).get("kill_switch")
+    if not name:
+        return None
+    path = Path(root) / name
+    if path.exists():
+        return str(name)
+    if path.parent.is_dir():
+        for other in path.parent.glob(path.name + ".*"):
+            return str(Path(name).parent / other.name)
+    return None
 
 
 def is_live(cfg: dict | None) -> bool:
@@ -110,9 +128,9 @@ def check_account(cfg: dict | None, equity: float, prev_equity: float | None, hi
     if is_live(cfg) and not live_confirmed():
         stops.append(f"live account without {LIVE_CONFIRM_ENV}={LIVE_CONFIRM_VALUE}")
         res.exits_ok = False
-    ks = Path(root) / st["kill_switch"] if st.get("kill_switch") else None
-    if ks is not None and ks.exists():
-        stops.append(f"kill switch {st['kill_switch']} exists: delete it to trade again")
+    ks = kill_switch_on(cfg, root)
+    if ks:
+        stops.append(f"kill switch {ks} exists: delete it to trade again")
         res.exits_ok = False
 
     if not equity or equity <= 0 or equity != equity:

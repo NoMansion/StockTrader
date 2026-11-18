@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import signal
 import statistics
 import subprocess
 import time
@@ -201,6 +202,7 @@ class ClaudeCodeBackend:
         self.cwd = str(cwd) if cwd else None
         self.executable = executable or shutil.which("claude") or "claude"
         self.served: set[str] = set()               # models that actually answered (a busy model can fall back)
+        self.last_error = ""
 
     def command(self) -> list[str]:
         """The system prompt goes through a file and the schema is sent without its descriptions, so no argument
@@ -219,40 +221,75 @@ class ClaudeCodeBackend:
             cmd += ["--max-budget-usd", str(self.max_budget_usd)]
         return cmd
 
-    def _one(self, prompt: str) -> tuple[dict | None, float]:
+    def _run(self, prompt: str) -> tuple[int, str, str]:
+        """Run the CLI once. On timeout the whole process tree is killed: on Windows `claude` may be a .cmd shim,
+        and killing only the shim would leave the real process holding the pipes."""
+        kw = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+        proc = subprocess.Popen(self.command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, encoding="utf-8", errors="replace", cwd=self.cwd, **kw)
         try:
-            proc = subprocess.run(self.command(), input=prompt, capture_output=True, text=True, encoding="utf-8",
-                                  timeout=self.timeout_s, cwd=self.cwd)
-        except (subprocess.TimeoutExpired, OSError):
+            out, err = proc.communicate(prompt, timeout=self.timeout_s)
+            return proc.returncode, out, err
+        except subprocess.TimeoutExpired:
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
+            else:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except OSError:
+                    proc.kill()
+            try:
+                proc.communicate(timeout=10)
+            except Exception:
+                pass
+            raise
+
+    def _one(self, prompt: str) -> tuple[dict | None, float]:
+        """One run: (answer or None, cost). Why a run produced nothing is kept in self.last_error for the log."""
+        try:
+            code, stdout, stderr = self._run(prompt)
+        except subprocess.TimeoutExpired:
+            self.last_error = f"claude timed out after {self.timeout_s} s"
+            return None, 0.0
+        except OSError as e:
+            self.last_error = f"could not start {self.executable!r}: {e}"
             return None, 0.0
         try:
-            out = json.loads(proc.stdout)
+            out = json.loads(stdout)
         except (json.JSONDecodeError, TypeError):
+            tail = (stderr or stdout or "").strip().splitlines()[-1:] or ["no output"]
+            self.last_error = f"claude exited {code} without JSON: {tail[0][:200]}"
             return None, 0.0
         cost = float(out.get("total_cost_usd") or 0.0)
         if isinstance(out.get("modelUsage"), dict):
             self.served.update(str(k) for k in out["modelUsage"])
         if out.get("is_error"):
+            self.last_error = f"claude reported an error: {str(out.get('result'))[:200]}"
             return None, cost
         ans = out.get("structured_output")
         if ans is None:
             try:
                 ans = json.loads(out.get("result") or "")
             except (json.JSONDecodeError, TypeError):
+                self.last_error = "claude answered without the required structured output"
                 return None, cost
         return ans, cost
 
     def forecast(self, m: Market, now: float | None = None) -> Forecast | None:
         prompt = build_prompt(m, now)
         answers, cost = [], 0.0
-        self.served = set()
+        self.served, self.last_error = set(), ""
         for _ in range(self.runs):                  # one at a time: never more than one Claude process
             ans, c = self._one(prompt)
             cost += c
             if ans is not None:
                 answers.append(ans)
         model = ",".join(sorted(self.served)) or self.model or "default"
-        return aggregate(m.market_id, answers, self.name, model, cost, max_run_spread=self.max_run_spread, now=now)
+        f = aggregate(m.market_id, answers, self.name, model, cost, max_run_spread=self.max_run_spread,
+                      min_runs=min(2, self.runs), now=now)
+        if f is None and not self.last_error:
+            self.last_error = f"only {len(answers)} of {self.runs} runs gave a valid answer"
+        return f
 
 
 class ApiBackend:
@@ -323,7 +360,8 @@ class ApiBackend:
             return None
         except anthropic.APIConnectionError:
             return None
-        return aggregate(m.market_id, answers, self.name, self.model, max_run_spread=self.max_run_spread, now=now)
+        return aggregate(m.market_id, answers, self.name, self.model, max_run_spread=self.max_run_spread,
+                         min_runs=min(2, self.runs), now=now)
 
 
 class FileBackend:

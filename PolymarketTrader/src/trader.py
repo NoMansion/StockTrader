@@ -40,8 +40,9 @@ class CycleResult:
 
 
 class Trader:
-    def __init__(self, cfg: dict, ledger: Ledger, venue, forecaster, root="."):
+    def __init__(self, cfg: dict, ledger: Ledger, venue, forecaster, root=".", heartbeat=None):
         self.cfg, self.ledger, self.venue, self.forecaster, self.root = cfg, ledger, venue, forecaster, root
+        self.heartbeat = heartbeat or (lambda: None)   # called between slow steps (keeps the run lock fresh)
         self.rules = SizingRules.from_config(cfg.get("sizing"))
         self.fees = FeeModel.from_config(cfg)
         ex = cfg.get("execution") or {}
@@ -79,10 +80,23 @@ class Trader:
         return self._books[market_id]
 
     def _marks(self) -> dict[str, tuple]:
+        """token -> (bid, mid). A position with no book this cycle (its market closed and is waiting to settle, or
+        the book request failed) keeps its last recorded price: valuing it at zero would fake a drawdown."""
         marks = {}
         for mid, (yes, no, _) in self._books.items():
             marks[yes.token_id] = (yes.best_bid, yes.mid)
             marks[no.token_id] = (no.best_bid, no.mid)
+        for pos in self.ledger.positions():
+            if pos["token_id"] in marks:
+                continue
+            snap = self.ledger.one("SELECT bid, ask, mid FROM snapshots WHERE market_id=? AND mid IS NOT NULL "
+                                   "ORDER BY ts DESC LIMIT 1", (pos["market_id"],))
+            if not snap:
+                continue
+            if pos["outcome"] == "YES":
+                marks[pos["token_id"]] = (snap["bid"], snap["mid"])
+            else:
+                marks[pos["token_id"]] = (None if snap["ask"] is None else 1.0 - snap["ask"], 1.0 - snap["mid"])
         return marks
 
     def _exposure(self, m: Market, equity: float) -> Exposure:
@@ -104,6 +118,7 @@ class Trader:
 
     # ---- 1. mark ------------------------------------------------------------------
     def mark(self, res: CycleResult, now: float) -> None:
+        closed: set[str] = set()
         watch = {p["market_id"] for p in self.ledger.positions()} | {o["market_id"] for o in self.broker.resting()}
         recent = {r["market_id"] for r in self.ledger.q(
             "SELECT DISTINCT f.market_id FROM forecasts f JOIN markets m ON m.market_id=f.market_id "
@@ -116,17 +131,45 @@ class Trader:
                 m = None
             if m is not None:
                 self._markets[mid] = m
+                self.ledger.set_checked(mid, now)
             if m is not None and m.closed:
-                for o in self.broker.resting(mid):               # nothing may fill in a market that has closed
-                    self.broker.cancel(o["id"], "market closed")
+                closed.add(mid)                                  # its resting orders wait for the settlement
                 self._settle(mid, res, now)
                 continue
             self._load_books(mid, res)
+        self._check_resolutions(watch | recent, res, now)
         books = {}
         for mid, (yes, no, _) in self._books.items():
             books[yes.token_id], books[no.token_id] = yes, no
-        for line in self.broker.work_resting(books, self._category, now):
+        for line in self.broker.work_resting(books, self._category, now, closed=closed):
             res.say(line)
+
+    def _check_resolutions(self, already: set[str], res: CycleResult, now: float, limit: int = 40) -> None:
+        """Every market that was ever forecast must end up with its outcome recorded, traded or not: the forecast
+        scoring is only honest on the full set. Markets no longer tracked each cycle are looked up twice a day
+        once their end date is near, and every three days before that (some resolve early)."""
+        rows = self.ledger.q(
+            """SELECT m.market_id, m.end_ts, COALESCE(m.checked_ts, MAX(f.ts)) AS checked FROM markets m
+               JOIN forecasts f ON f.market_id = m.market_id WHERE m.payout_yes IS NULL
+               GROUP BY m.market_id ORDER BY checked""")
+        done = 0
+        for r in rows:
+            mid = r["market_id"]
+            if mid in already or done >= limit:
+                continue
+            idle = now - float(r["checked"] or 0.0)
+            near_end = r["end_ts"] is not None and now >= float(r["end_ts"]) - DAY
+            if not (idle >= 72 * 3600.0 or (near_end and idle >= 12 * 3600.0)):
+                continue
+            done += 1
+            try:
+                is_closed = self.venue.is_closed(mid)
+            except Exception as e:
+                res.say(f"{mid}: resolution check failed ({type(e).__name__}: {e})")
+                continue
+            self.ledger.set_checked(mid, now)
+            if is_closed:
+                self._settle(mid, res, now)
 
     def _settle(self, market_id: str, res: CycleResult, now: float) -> None:
         """Only a market the venue reports as closed is settled, and only at a payout of exactly 0, 0.5 or 1:
@@ -142,6 +185,8 @@ class Trader:
         if pay not in (0.0, 0.5, 1.0):
             res.say(f"{market_id}: settlement value {pay!r} not understood, NOT settled: check by hand")
             return
+        for line in self.broker.resolve_closed(market_id, pay, self._category, now):
+            res.say(line)
         credited = self.ledger.settle(market_id, pay, ts=now)
         res.say(f"{market_id}: settled, YES pays {pay:g}, ${credited:,.2f} credited")
 
@@ -209,6 +254,16 @@ class Trader:
             if why:
                 dropped[m.market_id] = why
                 continue
+            # The benchmark price is read immediately before the forecast is requested: earlier forecasts in this
+            # cycle took minutes, and a price from before them would not be the price this forecast competes with.
+            if asked:
+                self._books.pop(m.market_id, None)
+                b = self._load_books(m.market_id, res)
+            if b is None or b[0].mid is None:
+                dropped[m.market_id] = "no two-sided market"
+                res.say(f"{m.market_id}: not forecast (no two-sided market)")
+                continue
+            mid_then = b[0].mid
             self.ledger.upsert_market(full.ledger_row(), ts=now)
             asked += 1
             try:
@@ -216,12 +271,15 @@ class Trader:
             except Exception as e:
                 res.say(f"{m.market_id}: forecaster failed ({type(e).__name__}: {e})")
                 continue
+            finally:
+                self.heartbeat()
             if f is None:
-                res.say(f"{m.market_id}: no usable forecast")
+                why_not = getattr(self.forecaster, "last_error", "") or "no answer yet"
+                res.say(f"{m.market_id}: no usable forecast ({why_not})")
                 continue
-            fid = self.ledger.add_forecast(f.ledger_row(res.run_id, b[0].mid))
-            res.say(f"{m.market_id}: forecast {f.p_yes:.2f} vs market {b[0].mid:.2f} ({f.confidence}, runs {f.p_runs})")
-            out.append((full, f, fid, b[0].mid))
+            fid = self.ledger.add_forecast(f.ledger_row(res.run_id, mid_then))
+            res.say(f"{m.market_id}: forecast {f.p_yes:.2f} vs market {mid_then:.2f} ({f.confidence}, runs {f.p_runs})")
+            out.append((full, f, fid, mid_then))
         res.stats.update(forecasts=len(out), dropped=len(dropped))
         return out
 
@@ -254,6 +312,13 @@ class Trader:
                 self.ledger.add_decision({**base, "action": "SKIP", "reason": reason, **extra})
                 res.say(f"{m.market_id}: no trade ({reason})")
 
+            for o in self.broker.resting(m.market_id):           # a new forecast replaces any working order,
+                self.broker.cancel(o["id"], "replaced by a newer forecast")   # whatever the new forecast says
+            ks = safety.kill_switch_on(self.cfg, self.root)      # checked again: forecasting took minutes
+            if ks:
+                skip(f"kill switch {ks} appeared during the cycle")
+                res.status = "stopped"
+                continue
             if b is None or b[0].mid is None:
                 skip("no two-sided market after the forecast")
                 continue
@@ -272,8 +337,6 @@ class Trader:
             if sold and sold["ts"] is not None and now - float(sold["ts"]) < self.reentry_cooldown_s:
                 skip("sold recently: no re-entry (and no flip to the other side) during the cooldown")
                 continue
-            for o in self.broker.resting(m.market_id):           # a new forecast replaces any working order
-                self.broker.cancel(o["id"], "replaced by a newer forecast")
             if orders_left <= 0 or usd_left < self.rules.min_order_usd:
                 skip("daily order budget used")
                 continue
@@ -317,6 +380,10 @@ class Trader:
         self.ledger.start_run(res.run_id)
         try:
             prev = self.ledger.last_equity()
+            ks = safety.kill_switch_on(self.cfg, self.root)
+            if ks:                                               # before mark(): a stopped account fills nothing
+                for o in self.broker.resting():
+                    self.broker.cancel(o["id"], f"kill switch {ks}")
             self.mark(res, now)
             eq = self.ledger.record_equity(self._marks(), ts=now)
             n24, usd24 = self.ledger.count_orders_since(now - DAY)
@@ -334,6 +401,7 @@ class Trader:
                 self.entries(forecasts, eq["equity"], acct, res, now)
             else:
                 res.status = "stopped"
+            if res.status == "stopped":
                 for o in self.broker.resting():
                     self.broker.cancel(o["id"], "account safety stop")
             eq = self.ledger.record_equity(self._marks(), ts=now + 1e-3)

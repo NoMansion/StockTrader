@@ -36,14 +36,19 @@ DEFAULTS = {
         r"\b(acquire|acquires|acquisition|merger|merge with|ipo|buyback)\b",                        # corporate announcements
     ],
     "max_markets_per_event": 2,
-    "max_candidates_per_cycle": 6,
+    "max_events_scanned": 300,
+    "max_candidates_per_cycle": 4,
     "reforecast_after_hours": 48.0,
 }
 
 
 def settings(cfg: dict | None) -> dict:
+    given = (cfg or {}).get("universe") or {}
+    unknown = sorted(set(given) - set(DEFAULTS))
+    if unknown:
+        raise ValueError(f"unknown universe setting(s) in config: {', '.join(unknown)}")
     out = dict(DEFAULTS)
-    out.update((cfg or {}).get("universe") or {})
+    out.update(given)
     return out
 
 
@@ -69,6 +74,8 @@ def prefilter(m: Market, st: dict, now: float | None = None) -> str:
     if days > st["max_days_to_resolution"]:
         return f"{days:.0f} days to resolution (max {st['max_days_to_resolution']:g})"
     labels = set(m.tags) | ({m.category} if m.category else set())
+    if not labels:                                  # the deny list cannot be applied to a market with no label
+        return "no category or tags"
     deny = {c.lower() for c in st["categories_deny"]}
     allow = {c.lower() for c in st["categories_allow"]}
     hit = labels & deny

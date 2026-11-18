@@ -104,4 +104,4 @@ runtime:
   min_free_gb: 1.5                # do not start when the machine is short of memory
   low_priority: true
   venue_min_interval_s: 0.5       # seconds between requests to the exchange
-  lock_stale_hours: 3
+  lock_stale_hours: 1             # a lock not refreshed for this long belongs to a dead run (it is refreshed after every forecast)

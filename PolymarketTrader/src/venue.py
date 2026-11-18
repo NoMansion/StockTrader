@@ -202,6 +202,12 @@ class PolymarketUS:
                 ev = None
         return market_from_json(m, ev)
 
+    def is_closed(self, slug: str) -> bool:
+        """One request: has this market closed? Used to look up resolutions of markets no longer being tracked."""
+        self._throttle()
+        m = (self.client.markets.retrieve_by_slug(slug) or {}).get("market") or {}
+        return bool(m.get("closed"))
+
     def books(self, slug: str) -> tuple[Book, Book, str | None]:
         self._throttle()
         return book_from_json(slug, self.client.markets.book(slug) or {}, now=self.clock())

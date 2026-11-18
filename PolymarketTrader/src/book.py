@@ -6,7 +6,13 @@ usual way paper results in thin markets come out better than real ones.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
+
+
+def floor_cents(x: float) -> float:
+    """Round a share count down to hundredths without losing a cent to binary floats (20.06 stays 20.06)."""
+    return math.floor(x * 100.0 + 1e-6) / 100.0
 
 
 @dataclass
@@ -81,7 +87,7 @@ def simulate_buy(book: Book, usd: float, limit: float, fee_per_share=None, depth
         fee = float(fee_per_share(price)) if fee_per_share else 0.0
         unit = price + fee
         shares = min(size * depth_haircut, left / unit)
-        shares = int(shares * 100) / 100.0          # venues trade in hundredths of a share
+        shares = floor_cents(shares)                # venues trade in hundredths of a share
         if shares <= 0:
             continue
         fills.append(Fill(price, shares, round(fee * shares, 6)))
@@ -96,7 +102,8 @@ def simulate_sell(book: Book, shares: float, limit: float, fee_per_share=None, d
     for price, size in book.bids:
         if price < limit - 1e-9 or left <= 1e-9:
             break
-        qty = int(min(size * depth_haircut, left) * 100) / 100.0
+        take = min(size * depth_haircut, left)
+        qty = left if abs(take - left) < 1e-9 else floor_cents(take)   # a full exit sells every last share
         if qty <= 0:
             continue
         fee = float(fee_per_share(price)) if fee_per_share else 0.0

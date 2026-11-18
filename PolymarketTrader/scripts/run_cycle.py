@@ -65,14 +65,14 @@ def main() -> int:
             return 1
 
     try:
-        with runtime.Lock(ROOT / "data" / "cycle.lock", float(rt.get("lock_stale_hours", 3))):
+        with runtime.Lock(ROOT / "data" / "cycle.lock", float(rt.get("lock_stale_hours", 1))) as lock:
             ledger = Ledger(ROOT / "data" / "pmt.db")
             try:
                 if ledger.deposits() == 0 and not safety.is_live(cfg):
                     start = float((cfg.get("account") or {}).get("paper_bankroll", 1000.0))
                     ledger.deposit(start, "deposit: paper bankroll")
                     print(f"paper account opened with ${start:,.2f}")
-                trader = Trader(cfg, ledger, venue, make_backend(cfg, ROOT), root=ROOT)
+                trader = Trader(cfg, ledger, venue, make_backend(cfg, ROOT), root=ROOT, heartbeat=lock.touch)
                 t0 = time.time()
                 res = trader.run(do_forecast=not args.no_forecast)
                 print("\n".join(res.log))

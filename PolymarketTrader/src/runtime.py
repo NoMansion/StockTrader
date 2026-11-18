@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -27,11 +28,11 @@ def in_quiet_window(windows: list[str] | None, now: datetime | None = None) -> s
     hm = now.hour * 60 + now.minute
     for w in windows or []:
         try:
-            a, b = w.split("-")
-            lo = int(a[:2]) * 60 + int(a[3:5])
-            hi = int(b[:2]) * 60 + int(b[3:5])
-        except (ValueError, IndexError):
-            continue
+            a, b = str(w).split("-")
+            (ah, am), (bh, bm) = a.strip().split(":"), b.strip().split(":")
+            lo, hi = int(ah) * 60 + int(am), int(bh) * 60 + int(bm)
+        except ValueError:
+            raise ValueError(f"runtime.quiet_windows entry {w!r} is not of the form HH:MM-HH:MM") from None
         if (lo <= hm < hi) if lo <= hi else (hm >= lo or hm < hi):
             return w
     return None
@@ -78,22 +79,38 @@ def free_memory_gb() -> float | None:
 
 
 class Lock:
-    """data/cycle.lock holds the PID and start time. A lock older than `stale_hours` is taken over (a crashed run)."""
+    """data/cycle.lock holds the PID and start time. The running cycle touches it as it works (`touch`), so a lock
+    whose file has not changed for `stale_hours` belongs to a run that died and is taken over."""
 
     def __init__(self, path: str | Path, stale_hours: float = 3.0):
         self.path, self.stale_s = Path(path), stale_hours * 3600.0
         self.held = False
+        self.tag = f"pid {os.getpid()} started {time.strftime('%Y-%m-%d %H:%M:%S')} id {uuid.uuid4().hex[:8]}"
 
     def __enter__(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
         if self.path.exists() and time.time() - self.path.stat().st_mtime < self.stale_s:
             raise Busy(f"another cycle holds {self.path} ({self.path.read_text(encoding='utf-8', errors='replace').strip()})")
-        self.path.write_text(f"pid {os.getpid()} started {time.strftime('%Y-%m-%d %H:%M:%S')}", encoding="utf-8")
+        self.path.write_text(self.tag, encoding="utf-8")
         self.held = True
         return self
 
+    def touch(self) -> None:
+        """Called between slow steps: shows the cycle is alive, so a long run is never mistaken for a dead one."""
+        if self.held and self.ours():
+            try:
+                os.utime(self.path, None)
+            except OSError:
+                pass
+
+    def ours(self) -> bool:
+        try:
+            return self.path.read_text(encoding="utf-8", errors="replace").strip() == self.tag
+        except OSError:
+            return False
+
     def __exit__(self, *exc):
-        if self.held:
+        if self.held and self.ours():               # never remove a lock another run has taken over
             try:
                 self.path.unlink()
             except OSError:

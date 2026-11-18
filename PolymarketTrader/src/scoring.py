@@ -103,14 +103,18 @@ class DriftReport:
     horizon_hours: float = 0.0
 
 
-def price_drift(ledger: Ledger, horizon_hours: float = 72.0, min_gap: float = 0.03) -> DriftReport:
+def price_drift(ledger: Ledger, horizon_hours: float = 72.0, min_gap: float = 0.03, first_only: bool = True) -> DriftReport:
     """For forecasts that disagreed with the market by at least `min_gap`: how much of the gap did the market close
     within `horizon_hours`? +1 = the price moved all the way to the model's number, 0 = it did not move, negative
-    = it moved the other way. A resolved market counts at its payout."""
+    = it moved the other way. A resolved market counts at its payout. One observation per market (its first
+    forecast): repeat forecasts of a market overlap in time and are not independent evidence."""
     rep = DriftReport(horizon_hours=horizon_hours)
-    caps = []
+    caps, seen = [], set()
     for f in ledger.q("SELECT f.*, m.payout_yes, m.resolved_ts FROM forecasts f JOIN markets m ON m.market_id=f.market_id "
-                      "WHERE f.market_mid IS NOT NULL"):
+                      "WHERE f.market_mid IS NOT NULL ORDER BY f.ts"):
+        if first_only and f["market_id"] in seen:
+            continue
+        seen.add(f["market_id"])
         gap = float(f["p_yes"]) - float(f["market_mid"])
         if abs(gap) < min_gap:
             continue

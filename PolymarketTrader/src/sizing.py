@@ -45,25 +45,27 @@ def expected_return(q: float, cost: float) -> float:
 
 @dataclass
 class SizingRules:
-    shrink_weight: float = 0.5          # how far the model moves the market price
-    kelly_fraction: float = 0.2         # fraction of full Kelly
-    min_edge: float = 0.05              # shrunk probability minus all-in cost, in probability points
+    shrink_weight: float = 0.3          # how far the model moves the market price
+    kelly_fraction: float = 0.25        # fraction of full Kelly
+    min_edge: float = 0.03              # shrunk probability minus all-in cost, in probability points
     min_edge_ratio: float = 0.0         # edge must also be this fraction of the cost (guards cheap longshots)
     min_annual_return: float = 0.0      # expected return, annualised over days to resolution, must exceed this
     max_disagreement: float = 0.25      # |model - market| above this is treated as "we are missing something"
-    min_price: float = 0.08             # do not buy an outcome cheaper than this ...
-    max_price: float = 0.92             # ... or dearer than this
-    max_position_pct: float = 0.03      # one market, fraction of equity (at cost)
-    max_event_pct: float = 0.06         # all markets of one event
-    max_category_pct: float = 0.25      # one category
-    max_total_exposure_pct: float = 0.50  # everything; the rest stays in cash
+    min_price: float = 0.12             # do not buy an outcome cheaper than this ...
+    max_price: float = 0.88             # ... or dearer than this
+    max_position_pct: float = 0.02      # one market, fraction of equity (at cost)
+    max_event_pct: float = 0.04         # all markets of one event
+    max_category_pct: float = 0.20      # one category
+    max_total_exposure_pct: float = 0.40  # everything; the rest stays in cash
     min_order_usd: float = 5.0          # below this the order is not worth its spread
-    max_order_usd: float = 100.0        # hard dollar ceiling per order, whatever the equity
+    max_order_usd: float = 50.0         # hard dollar ceiling per order, whatever the equity
 
     @classmethod
     def from_config(cls, cfg: dict | None) -> "SizingRules":
-        known = {k: v for k, v in (cfg or {}).items() if k in cls.__dataclass_fields__}
-        return cls(**known)
+        unknown = sorted(set(cfg or {}) - set(cls.__dataclass_fields__))
+        if unknown:                                 # a misspelt cap must not silently fall back to its default
+            raise ValueError(f"unknown sizing setting(s) in config: {', '.join(unknown)}")
+        return cls(**(cfg or {}))
 
 
 @dataclass

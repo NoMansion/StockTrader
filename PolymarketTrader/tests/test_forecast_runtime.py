@@ -140,6 +140,26 @@ def test_claude_code_backend_falls_back_to_result_text_and_survives_errors(tmp_p
     assert missing.forecast(market(), NOW) is None
 
 
+def test_single_run_mode_still_forecasts_and_failures_say_why(tmp_path):
+    ok = "print(json.dumps({'is_error': False, 'structured_output': " + repr(answer(0.4)) + "}))\n"
+    be = fc.ClaudeCodeBackend(runs=1, cwd=tmp_path / "a", executable=fake_claude(tmp_path, ok), timeout_s=60)
+    assert be.forecast(market(), NOW).p_yes == 0.4
+    bad = "sys.stderr.write('Not logged in\\n'); sys.exit(1)\n"
+    be = fc.ClaudeCodeBackend(runs=1, cwd=tmp_path / "b", executable=fake_claude(tmp_path, bad), timeout_s=60)
+    assert be.forecast(market(), NOW) is None and "Not logged in" in be.last_error
+    gone = fc.ClaudeCodeBackend(runs=1, cwd=tmp_path / "c", executable=str(tmp_path / "nope"))
+    assert gone.forecast(market(), NOW) is None and "could not start" in gone.last_error
+
+
+def test_a_hung_claude_is_killed_at_the_timeout(tmp_path):
+    hang = "import time\ntime.sleep(60)\n"
+    be = fc.ClaudeCodeBackend(runs=1, cwd=tmp_path / "h", executable=fake_claude(tmp_path, hang), timeout_s=2)
+    import time as _t
+    t0 = _t.time()
+    assert be.forecast(market(), NOW) is None and "timed out" in be.last_error
+    assert _t.time() - t0 < 20
+
+
 def test_make_backend(tmp_path, monkeypatch):
     assert isinstance(fc.make_backend({}, tmp_path), fc.ClaudeCodeBackend)
     assert isinstance(fc.make_backend({"forecaster": {"backend": "file"}}, tmp_path), fc.FileBackend)
@@ -159,7 +179,9 @@ def test_quiet_windows():
     assert runtime.in_quiet_window(["17:15-18:20"], at(18, 20)) is None
     assert runtime.in_quiet_window(["23:00-02:00"], at(1, 0)) == "23:00-02:00"
     assert runtime.in_quiet_window(["23:00-02:00"], at(12, 0)) is None
-    assert runtime.in_quiet_window(["nonsense"], at(12, 0)) is None
+    assert runtime.in_quiet_window(["9:00-10:00"], at(9, 30)) == "9:00-10:00"       # no leading zero needed
+    with pytest.raises(ValueError):                                              # a typo is an error, not "no window"
+        runtime.in_quiet_window(["nonsense"], at(12, 0))
     assert runtime.in_quiet_window(None, at(12, 0)) is None
 
 
@@ -172,6 +194,24 @@ def test_lock_blocks_a_second_cycle_and_releases(tmp_path):
     assert not path.exists()
     with runtime.Lock(path):
         pass
+
+
+def test_lock_heartbeat_and_takeover_do_not_fight(tmp_path):
+    path = tmp_path / "cycle.lock"
+    first = runtime.Lock(path, stale_hours=1)
+    first.__enter__()
+    old = path.stat().st_mtime - 2 * 3600
+    os.utime(path, (old, old))
+    first.touch()                                    # the running cycle shows it is alive
+    with pytest.raises(runtime.Busy):
+        runtime.Lock(path, stale_hours=1).__enter__()
+    os.utime(path, (old, old))                       # now it really is dead: a second run takes over
+    second = runtime.Lock(path, stale_hours=1)
+    second.__enter__()
+    first.__exit__(None, None, None)                 # the first run waking up must not delete the second's lock
+    assert path.exists() and second.ours()
+    second.__exit__(None, None, None)
+    assert not path.exists()
 
 
 def test_stale_lock_is_taken_over(tmp_path):
