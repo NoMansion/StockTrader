@@ -789,7 +789,7 @@ exchange listed in the event:
 one busy market of a thirty-outcome event counted as an event of one. It now counts the markets the exchange
 listed. The table above uses the corrected count; no earlier conclusion rested on the old one.
 
-### 3.20 Family 28: stand-alone questions (2:58 am CST, November 19)
+### 3.20 Family 28: stand-alone questions (2:53 am CST, November 19)
 
 **Why.** 3.19 found the taker edge in events the exchange lists with a single market. This family tests that
 directly: 132 rules on single-market events (price bands on both sides; NO against a cheap YES by days left, by

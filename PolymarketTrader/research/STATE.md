@@ -218,7 +218,7 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   NEXT IDEAS: (a) 5-cent rule restricted to single-market events with <= 30d and by category; (b) the same
   breakdown for YES 5-20c; (c) forward log: add single-market flag to `scripts/shadow_longshot.py`.
 
-- 2:58 am CST Nov 19 (check-in 17): family 28 (stand-alone questions), report 3.20: strong in sample (t 4-16,
+- 2:53 am CST Nov 19 (check-in 17): family 28 (stand-alone questions), report 3.20: strong in sample (t 4-16,
   280-600 events), positive with no loss since April 2026, but every rule is THIN out of sample (10-87 events):
   not a pass, and the split / 100-event bar stay where they are. `scripts/shadow_longshot.py` now records the
   event's size (`ev_markets`). Commodities census in progress (about 2,900 of 8,000).
