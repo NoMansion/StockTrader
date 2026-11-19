@@ -223,6 +223,14 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   not a pass, and the split / 100-event bar stay where they are. `scripts/shadow_longshot.py` now records the
   event's size (`ev_markets`). Commodities census in progress (about 2,900 of 8,000).
 
+- 3:10 am CST Nov 19: THE USER ASKED TO MIGRATE THE WORK TO THEIR PC ("under the predictionmarkettrader
+  project"). This session cannot reach the PC (no shared folder). Prepared instead: `docs/MIGRATE_TO_PC.md`
+  (three steps), `scripts/sync_from_github.ps1`, path-independent `scripts/run_cycle_hidden.vbs`,
+  `requirements-research.txt`, README updated; a data bundle (paper ledger, observation log, history database;
+  snapshot 3:06 am) handed over as a file in the conversation. The cloud jobs KEEP RUNNING until the user says
+  the PC copy is running; then stop the cloud paper loop (one ledger only) and ask whether the hourly check-ins
+  should stop too. Do not stop them unasked.
+
 ## How to run a round
 
 ```

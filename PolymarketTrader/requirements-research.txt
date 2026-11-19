@@ -1,0 +1,3 @@
+# Only for the backtests in research/ (not needed to run the paper bot). Versions as tested on 2026-11-18.
+numpy==2.5.3
+pandas==3.0.5

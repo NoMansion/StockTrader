@@ -1,4 +1,4 @@
-# PolymarketTrader first-session setup for Windows. Run from the project folder in PowerShell:
+# First-session setup for Windows. Run from the project folder (whatever it is called) in PowerShell:
 #     Set-ExecutionPolicy -Scope Process Bypass; .\setup.ps1
 # Steps: venv -> install -> tests -> offline demo. Nothing here touches the network beyond pip, and no money.
 
@@ -15,8 +15,12 @@ $py = ".\.venv\Scripts\python.exe"
 Write-Host "`n[2/4] Installing requirements" -ForegroundColor Cyan
 & $py -m pip install --quiet -r requirements.txt
 if ($LASTEXITCODE -ne 0) { throw "pip install failed" }
+# numpy and pandas, for the backtests in research\. If they fail to install the bot still works: the research
+# tests are skipped.
+& $py -m pip install --quiet -r requirements-research.txt
+if ($LASTEXITCODE -ne 0) { Write-Host "  (research packages not installed: backtests unavailable, the bot is unaffected)" -ForegroundColor Yellow }
 
-Write-Host "`n[3/4] Running tests (149 should pass)" -ForegroundColor Cyan
+Write-Host "`n[3/4] Running tests (all should pass)" -ForegroundColor Cyan
 & $py -m pytest -q
 if ($LASTEXITCODE -ne 0) { throw "tests failed: do not go further until they pass" }
 
