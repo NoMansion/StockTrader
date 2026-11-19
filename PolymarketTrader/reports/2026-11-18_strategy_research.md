@@ -4,27 +4,26 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 12:54 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 2:08 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
-  whoever rests orders, not to whoever pays the ask.** Across Economics, Politics and Science and Technology at
-  5,000+ contracts traded (12,468 markets, 3,589 events), all 34 rules that pass buy NO. Sections 3.7 to 3.16.
-- **Paying the ask for NO where YES is at 5 cents or less works in Economics only.** There it earned about +1.3%
-  per bet at both volume levels tested and passes the tail test. In Politics it earned +0.1% per bet, in Science
-  and Technology +0.1%; the three together +0.5% per bet, and −0.4% then +3.1% a year in the account replay.
-- **The resting-order version passes on the three categories pooled** (+2.0% per bet, 49 losing events of 1,270,
-  tail test passed in both halves, +3.4% a year before April 2026 and +17.6% a year after in the replay at 1%
-  stakes), and in Economics alone. In Politics alone and in Science and Technology alone it is positive but not
-  proven. It does not depend on where exactly the order rests or for how long: all 15 variants tried pass
-  (3.17). Its fills are modelled from daily highs and lows, not observed: until the forward log has observed
-  them (3.13), it is a hypothesis with good support, not a result.
+  whoever rests orders, not to whoever pays the ask.** Across all seven categories the bot trades, at 5,000+
+  contracts traded (17,522 markets, 5,316 events), 17 rules pass and 16 of them buy NO against a cheap YES.
+  Sections 3.7 to 3.19.
+- **The resting-order version of the 5-cent rule passes on all seven categories pooled:** +1.85% per bet, 58
+  losing events of 1,518, tail test passed in both halves, +3.6% a year before April 2026 and +14.8% a year after
+  in the replay at 1% stakes. It does not depend on where exactly the order rests or for how long (3.17). Its
+  fills are modelled from daily highs and lows, not observed: until the forward log has observed them (3.13),
+  it is a hypothesis with good support, not a result.
+- **Paying the ask does not pass on the pooled sample** (+0.43% per bet, tail test failed in both halves, replay
+  about zero). It works in two narrower places: Economics (+1.3% per bet, 3.11), and stand-alone yes/no
+  questions, events with a single market, where it lost 5 times in 696 (3.19). Both are small.
+- **Where the effect is and is not:** strongest in single-market events and in Economics; present with resting
+  orders in Politics and Science and Technology; absent in Elections and inside multi-outcome events.
 - **Only the narrow version survives as an account.** Buying NO against YES at up to 35 or 50 cents looks good
   per bet (+2.6% resting), but replayed it lost 3% a year with a 29% drawdown before April 2026, and counting
   each event once it earns nothing: its gains sit in a few events with dozens of outcomes (3.14, 3.17). The
   idea of correcting the forecast bot's starting price above 10 cents is not supported either.
-- **Elections, the fourth category, shows no effect of its own** (3.18): cheap YES there has been priced about
-  right since April 2026, and the 5-cent rule earns +0.1% (taker) to +0.9% (resting) per bet on few bets. Pooled
-  with the other three at 23,000+ contracts both versions still pass.
 - **A third flaw of mine, found at 11:55 pm (3.17):** the account replay took same-day bets losers first. Every
   replay figure in sections 3.8 to 3.16 is too pessimistic; the corrected ones are in 3.17 and in this list.
 - **No arbitrage across an event's outcomes** (3.15): where outcomes exclude each other, their bids add up to 1.00
@@ -35,10 +34,10 @@ round. Nothing here has been traded, on paper or otherwise.*
   right; the mispricing is where the volume is (3.10).
 - **Two flaws of mine found and fixed on the way:** markets chosen by lifetime volume (3.5), and "days to close"
   measured from a close date not knowable in advance (3.7). Rounds 3.1 to 3.5 are superseded.
-- **Forward test of Claude's forecasts:** four paper cycles, 16 forecasts, most of them low-confidence and not
-  traded, three resting paper orders, none filled, account at $1,000 (`reports/forward_log.csv`).
-- **Still to come:** Elections is downloading now (2,601 series to list, about an hour and a half), then Health
-  and World; Commodities, Financials and the rest after those.
+- **Forward test of Claude's forecasts:** five paper cycles, 20 forecasts, most of them low-confidence and not
+  traded, four resting paper orders, none filled, account at $1,000 (`reports/forward_log.csv`).
+- **Downloaded:** every category the bot trades. Commodities is downloading now, then Financials, Mentions,
+  Entertainment, Crypto, Social, Climate and Weather: categories the bot does not trade, tested for completeness.
 
 ## 1. Method
 
@@ -744,4 +743,48 @@ NO earns nothing either.
   carry it.
 - **Volume matters more than category.** At 23,000+ contracts the pooled taker version passes the tail test in
   both halves (+1.04% per bet); at 5,150+ it did not (+0.50%, 3.16).
+
+### 3.19 Round r13: all seven of the bot's categories, and where the effect lives (2:08 am CST, November 19)
+
+**Data.** Elections is complete down to 5,000 contracts; Health (616 markets) and World (795) are downloaded
+whole and are too small and too old to judge alone (3 markets between them closed after April 1). Pooled busy
+sample, 5,150+ contracts: 17,522 markets in 5,316 events, 593,068 daily bars, 8,193 markets out of sample.
+Pooled random sample: 12,378 markets in 5,202 events.
+
+**Random, seven categories: 1 pass, 7 leads** of about 3,750 rules: chance. **Busy, seven categories: 17 pass,
+120 leads.** 16 of the passes buy NO against a YES under 20 cents (most under 6); the other rests YES bids at 95
+cents or more in one question type.
+
+| 5-cent rule, 5,150+ contracts | Seven categories, taker | Seven categories, resting | Elections, taker | Elections, resting |
+|---|---|---|---|---|
+| Bets, events | 3,828 in 1,987 | 2,744 in 1,518 | 423 in 250 | 262 in 168 |
+| Mean return per bet | +0.43% | +1.85% | −0.45% | +0.22% |
+| Losing events | 61 | 58 | 8 | 8 |
+| Tail test in / out of sample | fails / fails | passes / passes | fails | fails |
+| Replay at 1% stakes, before April 2026 / after | −0.2% / −0.3% a year | +3.6% / +14.8% | +1.0% / −5.1% | +1.0% / −2.4% |
+
+**Where the effect lives: the size of the event.** NO against a YES at 5 cents or less, by how many markets the
+exchange listed in the event:
+
+| Markets in the event | Taker, in / out of sample | Resting, in / out | Events in / out |
+|---|---|---|---|
+| 1 (a stand-alone yes/no question) | +1.7% (t 4.4) / +2.2% | +3.9% (t 8.2) / +4.1% | 609 / 87 |
+| 2 to 4 | +0.8% / −0.6% | +2.9% / +0.3% | 311 / 259 |
+| 5 to 10 | −0.4% / −0.6% | +1.2% / +0.3% | 529 / 545 |
+| 11 or more | −0.4% / +0.1% | +1.4% / +1.4% | 243 / 233 |
+
+- **Single-market events carry the taker result.** 696 bets, 5 lost (0.7%) against a break-even of 2.4%; the 95%
+  upper bound on the true loss rate is 1.5%. Since April 2026: 87 bets, none lost. That is too few to pass
+  out of sample alone (with 87 the bound is 3.4%).
+- **Inside multi-outcome events the cheap outcomes are priced about right** for someone paying the ask, which
+  agrees with 3.15: those events are tightly priced as a set.
+- **Why it is not a bigger finding:** these questions are scarce and thin. 87 qualified in the last half year
+  against 302 for all of 2026; 38% of entry days traded under 100 contracts; median holding 30 days. Replay at
+  1% stakes: +1.0% a year before April 2026, +3.0% a year after, with 6% to 13% of the account at work.
+- **One step up in price (YES at 5 to 10 cents, single-market events):** +2.7% taker and +6.0% resting per bet,
+  21 losses in 606, passes in sample and is unproven out of sample (67 events, 3 lost).
+
+**A correction to the measure.** "Markets in the event" used to count the markets present in the sample, so the
+one busy market of a thirty-outcome event counted as an event of one. It now counts the markets the exchange
+listed. The table above uses the corrected count; no earlier conclusion rested on the old one.
 

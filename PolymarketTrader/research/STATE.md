@@ -209,6 +209,15 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   resting, few bets). Four categories pooled at 23,000+: both versions pass the tail test in both halves.
   Next: Elections to 5,000, then Health and World (small), then pooled five/six-category rounds at 5,150.
 
+- 2:08 am CST Nov 19 (check-in 16): ALL SEVEN BOT CATEGORIES DOWNLOADED. Round r13 (report 3.19), pooled busy
+  sample 17,522 markets / 5,316 events: 17 pass (16 buy NO against cheap YES). 5-cent rule pooled: RESTING passes
+  both halves (+1.85% per bet; replay +3.6% / +14.8% a year); TAKER fails (+0.43%). The effect lives in
+  SINGLE-MARKET events (taker 5 losses in 696) and Economics; absent in Elections and inside multi-outcome
+  events. `ev_total` now counts the markets the exchange listed (was: markets in the sample).
+  Download has moved to Commodities (random 2,500 then census, capped at 8,000), then Financials etc.
+  NEXT IDEAS: (a) 5-cent rule restricted to single-market events with <= 30d and by category; (b) the same
+  breakdown for YES 5-20c; (c) forward log: add single-market flag to `scripts/shadow_longshot.py`.
+
 ## How to run a round
 
 ```

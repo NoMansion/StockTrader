@@ -99,6 +99,8 @@ def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars
             FROM markets m LEFT JOIN series s ON s.ticker = m.series {where}""", db, params=args)
     cd = pd.read_sql_query(
         f"""SELECT c.* FROM candles c JOIN markets m ON m.ticker = c.ticker {where} ORDER BY c.ticker, c.ts""", db, params=args)
+    # how many markets the exchange listed in each event, downloaded or not: the size of the event as a trader saw it
+    listed = pd.read_sql_query("SELECT event, COUNT(*) AS ev_listed FROM markets GROUP BY event", db)
     db.close()
     if cd.empty:
         return cd
@@ -150,7 +152,10 @@ def load(db_path: str | Path = DB, categories: list[str] | None = None, min_bars
     ev = pd.DataFrame({"ev_n": ge.size(), "ev_sum": ge.sum(), "ev_max": ge.max()}).reset_index()
     df = df.merge(ev, on=["event", "ts"], how="left")
     df["ev_fav"] = df["quoted"] & (df["mid"] >= df["ev_max"] - 1e-6)                    # the event's favourite
-    df["ev_total"] = df.groupby("event")["ticker"].transform("nunique").astype("int32")   # markets ever in the event
+    # Size of the event: the markets the exchange listed in it. (Until 2026-11-19 this counted only the markets
+    # present in the sample, so "an event of one market" could be the one busy market of a thirty-outcome event.)
+    df = df.merge(listed, on="event", how="left")
+    df["ev_total"] = df["ev_listed"].fillna(1).astype("int32")
 
     # ---- execution: what happened AFTER the bar ---------------------------------------------------
     g = df.groupby("ticker", sort=False)
