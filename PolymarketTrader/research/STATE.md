@@ -239,6 +239,13 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   OPEN, asked of the user: should the cloud download and the hourly research check-ins stop as well, now that
   the PC runs its own? Until answered they continue (history download + rounds), without the paper loop.
 
+- 3:38 am CST Nov 19: **THE CLOUD SESSION IS STOPPED, at the user's instruction ("stop the cloud session").**
+  Both scheduled tasks are disabled (research loop, job watchdog), the history download and the paper loop are
+  killed, nothing is left running here. The project now lives on the user's PC at
+  E:\Coding\PredictionMarketTrader, which has the data, runs its own download and checks, and holds the only
+  paper ledger. Do not restart anything in the cloud unless the user asks. From here on, the PC copy's
+  `research/STATE.md` is the control sheet; this file is a record up to the handover.
+
 ## How to run a round
 
 ```
