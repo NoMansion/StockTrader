@@ -4,23 +4,26 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 10:53 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 12:10 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics, Politics and Science and Technology at
   5,000+ contracts traded (12,468 markets, 3,589 events), all 34 rules that pass buy NO. Sections 3.7 to 3.16.
 - **Paying the ask for NO where YES is at 5 cents or less works in Economics only.** There it earned about +1.3%
   per bet at both volume levels tested and passes the tail test. In Politics it earned +0.1% per bet, in Science
-  and Technology +0.1%; the three together +0.5% per bet with a small loss in the account replay.
+  and Technology +0.1%; the three together +0.5% per bet, and −0.4% then +3.1% a year in the account replay.
 - **The resting-order version passes on the three categories pooled** (+2.0% per bet, 49 losing events of 1,270,
-  tail test passed in both halves, +3.1% and +11.4% a year in the replay at 1% stakes), and in Economics alone.
-  In Politics alone and in Science and Technology alone it is positive but not proven. Its fills are modelled
-  from daily highs and lows, not observed: until the forward log has observed them (3.13), it is a hypothesis
-  with good support, not a result.
+  tail test passed in both halves, +3.4% a year before April 2026 and +17.6% a year after in the replay at 1%
+  stakes), and in Economics alone. In Politics alone and in Science and Technology alone it is positive but not
+  proven. It does not depend on where exactly the order rests or for how long: all 15 variants tried pass
+  (3.17). Its fills are modelled from daily highs and lows, not observed: until the forward log has observed
+  them (3.13), it is a hypothesis with good support, not a result.
 - **Only the narrow version survives as an account.** Buying NO against YES at up to 35 or 50 cents looks good
-  per bet (+2.6% resting) and loses money when replayed (−4.6% a year, 29% drawdown): its gains sit in a few
-  events with dozens of outcomes, which an account with a per-event cap cannot hold in full (3.14). The same
-  goes for the idea of correcting the forecast bot's starting price above 10 cents: not supported.
+  per bet (+2.6% resting), but replayed it lost 3% a year with a 29% drawdown before April 2026, and counting
+  each event once it earns nothing: its gains sit in a few events with dozens of outcomes (3.14, 3.17). The
+  idea of correcting the forecast bot's starting price above 10 cents is not supported either.
+- **A third flaw of mine, found at midnight (3.17):** the account replay took same-day bets losers first. Every
+  replay figure in sections 3.8 to 3.16 is too pessimistic; the corrected ones are in 3.17 and in this list.
 - **No arbitrage across an event's outcomes** (3.15): where outcomes exclude each other, their bids add up to 1.00
   to 1.02, and the fee takes the rest.
 - **It is small either way.** Each bet risks about 96 cents to make 2 to 4. On a $1,000 account this is tens of
@@ -335,6 +338,8 @@ condition matters: in random Economics, most of which is thin, the same bets los
 
 ### 3.8 The 5-cent rule taken apart (4:40 pm CST)
 
+*Correction: the account-replay figures in this section were computed with a flawed ordering and are too pessimistic. Corrected figures are in 3.17.*
+
 Rule: busy market, YES at 5 cents or less, spread 5 cents or less, 30 days or less to the scheduled end; buy NO.
 
 | | Taker | Resting order |
@@ -551,6 +556,8 @@ weeks to mean anything.
 
 ### 3.14 Wider bands fail as an account; so does the price correction above 10 cents (8:55 pm CST)
 
+*Correction: the account-replay figures in this section were computed with a flawed ordering and are too pessimistic. Corrected figures are in 3.17.*
+
 **Why look.** At 5,000+ contracts a resting NO order earned +1.5% to +4% per bet in every band under 50 cents
 (3.13), which suggests a much bigger rule than the 5-cent one: rest NO bids against any cheap YES. Sample: both
 categories, 5,150+ contracts.
@@ -648,4 +655,62 @@ in). Too few events for anything to pass alone (about 140 in, 100 out).
 **Paper cycle at 10:03 pm.** Two new resting paper orders from Claude's forecasts: buy YES $20 at 70c on
 `KXTRUMPACT-26NOV15-T2` (Claude's blended 77%), buy NO $20 at 40c on `KXCBDHUNGARY-26DEC15-C25` (blended 47% for
 NO). Three resting orders in all, none filled.
+
+### 3.17 A flaw in the account replay, corrected; and where to rest the order (12:10 am CST, November 19)
+
+**The flaw.** `research/portfolio.py` replays a rule's bets in time order through an account with a cap per
+event. Bets entered on the same day were ordered by their eventual return, lowest first. With a cap of three bets
+per event, an event with ten longshots and one winner always had its one losing NO among the three taken. That
+is using the outcome, in the pessimistic direction. Same-day bets are now taken in an order unrelated to the
+outcome, and a test holds it there. Means per bet, t-statistics and tail tests never used this code and are
+unchanged. Every "replay" figure in 3.8 to 3.16 did.
+
+**Corrected replays, 1% stakes, 5-cent rule** (was → is; a year, before April 2026 / after):
+
+| Sample | Taker | Resting |
+|---|---|---|
+| Economics + Politics, 45,000+ (3.8) | +0.8% / +8.6% → +1.0% / +8.6% | +2.3% / +13.5% → unchanged |
+| Economics, 5,150+ (3.11) | +1.3% / +9.0% → +1.3% / +9.1% | +3.2% / +15.0% → +3.3% / +15.1% |
+| Politics, 15,000+ (3.12) | 0.0% / +7.9% → +0.2% / +7.9% | +1.2% / +12.8% → +1.5% / +12.8% |
+| Politics, 5,150+ (3.13) | −0.7% / −1.2% → −0.6% / +0.8% | +0.9% / +3.8% → +1.1% / +3.9% |
+| Economics + Politics, 5,150+ (3.13) | +0.3% / −3.3% → +0.5% / +4.4% | +3.5% / +12.7% → +3.8% / +15.4% |
+| Science and Technology, 5,150+ (3.16) | −0.6% / +2.0% → unchanged | +0.1% / +5.3% → unchanged |
+| Three categories, 5,150+ (3.16) | −0.7% / −2.9% → −0.4% / +3.1% | +3.1% / +11.4% → +3.4% / +17.6% |
+
+**Corrected replays, wide rules of 3.14** (resting, Economics + Politics, 5,150+):
+
+| Rule | Before April 2026 | After | Worst drawdown |
+|---|---|---|---|
+| NO where YES is 35c or less, any time | −4.6% → −3.2% a year | −9.6% → +6.5% a year | 28.6% |
+| NO where YES is 5 to 35c | −5.4% → −2.8% a year | +0.1% → +7.6% a year | 27.5% |
+| NO where YES is 10c or less, 30 days or less | +5.6% → +5.6% a year | +11.0% → +14.7% a year | 5.0% |
+
+**What changes in the conclusions.**
+- Nothing about which rules pass. The pooled taker replay is now slightly positive after April 2026 instead of
+  slightly negative; its tail test still fails in both halves, so the verdict on paying the ask stands.
+- The resting version looks better: +3.4% a year before April 2026 and +17.6% after, across three categories.
+- The wide rules are no longer "lose in both periods": they lost about 3% a year with a 28% drawdown for four
+  and a half years and then gained 7% a year. With an event-weighted t below zero that is still not a rule to
+  trade, but 3.14 overstated the case.
+
+**Where to rest the order, and for how long** (`research/resting_variants.py`; three categories, 5,150+
+contracts; YES at 5 cents or less, 30 days or less, spread 5 cents or less). "Deeper" is cents below the best NO
+bid; −1 is a cent better than the best bid, possible where the spread is 2 cents or more. A fill always needs a
+trade through the price.
+
+| Deeper (cents) | Days working | Fill rate | Bets | Mean per bet in / out | Losing events in / out | Replay in / out, a year |
+|---|---|---|---|---|---|---|
+| −1 | 3 | 74% | 1,825 | +2.2% / +2.4% | 22 of 783 / 8 of 333 | +3.0% / +21.2% |
+| 0 | 1 | 42% | 2,277 | +2.2% / +1.5% | 25 of 782 / 21 of 462 | +3.6% / +16.4% |
+| 0 (the sweeps' setting) | 3 | 54% | 2,390 | +2.2% / +1.7% | 28 of 815 / 21 of 479 | +3.4% / +19.8% |
+| 0 | 7 | 61% | 2,445 | +2.3% / +1.8% | 29 of 837 / 21 of 480 | +3.4% / +21.5% |
+| 1 | 3 | 37% | 1,837 | +2.7% / +2.2% | 27 of 654 / 21 of 409 | +3.6% / +17.5% |
+| 2 | 3 | 28% | 1,469 | +3.0% / +2.7% | 27 of 537 / 21 of 353 | +3.2% / +22.2% |
+| 3 | 3 | 22% | 1,212 | +3.6% / +3.2% | 25 of 449 / 21 of 326 | +3.6% / +26.8% |
+
+All 15 combinations tried (five depths, three windows) pass the tail test in both halves. Resting deeper trades
+fewer fills for more per fill and the account ends up in about the same place; leaving the order longer adds
+fills at no cost. So there is no setting to tune here, which is what a real effect looks like and a fitted one
+does not. (This table's replays differ a little from the one above for the same rule because the two programs
+break same-day ties differently; neither uses the outcome.)
 

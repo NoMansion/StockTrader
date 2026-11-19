@@ -55,8 +55,11 @@ def entries(p: Panel, rules: list[tuple[np.ndarray, str, str]]) -> np.ndarray:
             t = int(p.ticker[i])
             if t not in best or ts[i] < best[t][0]:
                 best[t] = (ts[i], max(close[i], ts[i] + DAY), float(r[i]), int(p.event[i]))
-    out = np.array(sorted(best.values()), dtype="float64") if best else np.zeros((0, 4))
-    return out
+    # Bets of the same day are taken in an order that has nothing to do with how they ended. (Until 2026-11-19
+    # this sorted ties by return, losers first: with a cap per event that made the account always hold the one
+    # losing outcome of a big event, and the replay too pessimistic.)
+    order = sorted(best, key=lambda t: (best[t][0], (t * 2654435761) % 4294967296))
+    return np.array([best[t] for t in order], dtype="float64") if best else np.zeros((0, 4))
 
 
 def simulate(bets: np.ndarray, stake_frac: float = 0.01, event_cap: float = 0.03, max_exposure: float = 0.5,

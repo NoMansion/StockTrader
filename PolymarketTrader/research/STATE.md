@@ -198,6 +198,12 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   the RESTING version passes both halves (+1.98% per bet, 1,270 events), the TAKER fails both. Fixed a crash on
   a missing title. Download is listing Elections (2,601 series), then Health, World.
 
+- 12:10 am CST Nov 19 (check-in 14): Elections still listing. FOUND AND FIXED A FLAW IN `portfolio.entries`:
+  same-day bets were ordered by return, losers first (pessimistic look-ahead). All replay figures of report 3.8
+  to 3.16 were too low; corrected table in 3.17; means, t and tail tests were never affected. New tool
+  `research/resting_variants.py`: 5 depths x 3 windows for the resting NO bid, all 15 pass the tail test in both
+  halves (report 3.17): no setting to tune.
+
 ## How to run a round
 
 ```

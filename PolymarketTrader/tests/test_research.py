@@ -193,3 +193,17 @@ def test_days_to_close_come_from_the_schedule_not_from_an_early_close(tmp_path):
     other = d[d["ticker"] == "S-0-1"]
     assert (other["dte"] == other["dte_real"]).all() and other["sched_known"].all()
     assert not d[d["ticker"] == "S-1-0"]["sched_known"].any()
+
+
+def test_same_day_bets_are_not_ordered_by_how_they_ended(fair):
+    """With a cap per event the account cannot take every bet of a day. Which ones it takes must not depend on the
+    outcome: sorting ties by return put the losers first."""
+    import portfolio
+    p = Panel(fair)
+    f = Features(p)
+    b = pd.DataFrame(portfolio.entries(p, [(f.base, "no", "tk")]), columns=["ts", "close", "r", "event"])
+    assert (b["ts"].diff().dropna() >= 0).all()                            # still in time order
+    days = [g["r"].to_numpy() for _, g in b.groupby("ts") if len(g) == 3 and len(set(g["r"])) == 3]
+    assert len(days) > 200
+    ascending = np.mean([(np.diff(r) > 0).all() for r in days])
+    assert ascending < 0.4                                                 # about 1 in 6 by chance; it was all of them
