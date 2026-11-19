@@ -8,7 +8,11 @@ if ! pgrep -f "research/kalshi_download.py" > /dev/null; then
 else
     echo "running: history download"
 fi
-if [ -f data/cloud_config.yaml ] && ! pgrep -f "scripts/paper_loop.py" > /dev/null; then
+# The paper account runs in ONE place. Once it has moved to the PC, data/PAPER_LOOP_MOVED_TO_PC says so and the
+# loop is not started here again (two ledgers would drift apart).
+if [ -f data/PAPER_LOOP_MOVED_TO_PC ]; then
+    echo "not started: paper loop (moved to the PC; see data/PAPER_LOOP_MOVED_TO_PC)"
+elif [ -f data/cloud_config.yaml ] && ! pgrep -f "scripts/paper_loop.py" > /dev/null; then
     setsid nohup python3 -u scripts/paper_loop.py --config data/cloud_config.yaml --every 3 >> data/run_cycle.log 2>&1 < /dev/null &
     echo "started: paper loop"
 else

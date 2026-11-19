@@ -231,6 +231,14 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   the PC copy is running; then stop the cloud paper loop (one ledger only) and ask whether the hourly check-ins
   should stop too. Do not stop them unasked.
 
+- 3:37 am CST Nov 19: THE PC COPY IS RUNNING (E:\Coding\PredictionMarketTrader; the user sent its status: 176
+  tests pass there, cloud data unpacked, its own download and hourly checks started). THE CLOUD PAPER LOOP IS
+  STOPPED FOR GOOD: `data/PAPER_LOOP_MOVED_TO_PC` makes `start_jobs.sh` skip it. Do not restart it. The ledger
+  and observation log were last written at 1:20 am CST (cycle 5), so the 3:06 am snapshot on the PC is
+  complete; final copies were handed over anyway. `reports/forward_log.csv` here is final at 20 forecasts.
+  OPEN, asked of the user: should the cloud download and the hourly research check-ins stop as well, now that
+  the PC runs its own? Until answered they continue (history download + rounds), without the paper loop.
+
 ## How to run a round
 
 ```
