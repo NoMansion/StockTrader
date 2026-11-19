@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 6:55 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 6:52 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **One mechanical result has held up: in busy markets, cheap YES contracts are overpriced, and buying NO
   against them has paid.** Where YES is quoted at 5 cents or less in a market that has already traded 45,000
@@ -440,7 +440,7 @@ questions where X then happened: a veto, a resignation, a White House visit, a t
 **Housekeeping.** The session's container was restarted at about 5:45 pm CST. The data survived; the download
 and the paper loop were restarted within two minutes.
 
-### 3.12 Round r09: Politics in full, and a weaker result there (6:55 pm CST)
+### 3.12 Round r09: Politics in full, and a weaker result there (6:52 pm CST)
 
 **Data.** The random Politics draw is complete (2,744 markets, 1,400 events). The Politics census has reached
 15,000 contracts and is still going down: 3,342 Politics markets in 1,209 events at that level, 6,323 markets in
