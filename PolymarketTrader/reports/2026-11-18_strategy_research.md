@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 2:08 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 1:57 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across all seven categories the bot trades, at 5,000+
@@ -744,7 +744,7 @@ NO earns nothing either.
 - **Volume matters more than category.** At 23,000+ contracts the pooled taker version passes the tail test in
   both halves (+1.04% per bet); at 5,150+ it did not (+0.50%, 3.16).
 
-### 3.19 Round r13: all seven of the bot's categories, and where the effect lives (2:08 am CST, November 19)
+### 3.19 Round r13: all seven of the bot's categories, and where the effect lives (1:57 am CST, November 19)
 
 **Data.** Elections is complete down to 5,000 contracts; Health (616 markets) and World (795) are downloaded
 whole and are too small and too old to judge alone (3 markets between them closed after April 1). Pooled busy
