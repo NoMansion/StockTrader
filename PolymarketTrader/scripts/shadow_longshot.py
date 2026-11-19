@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS checked (ticker TEXT PRIMARY KEY, ts REAL, why TEXT);
 """
 # added later: the hypothetical resting NO bid and what became of it
 EXTRA = {"rest_px": "REAL", "rest_ahead": "REAL", "maker_rate": "REAL", "rest_filled": "INTEGER", "rest_fill_ts": "REAL",
-         "rest_done": "INTEGER"}
+         "rest_done": "INTEGER", "ev_markets": "INTEGER"}      # ev_markets: markets the exchange lists in the event
 REST_HOURS = 72.0           # the backtest leaves a resting order for three daily bars
 
 
@@ -112,14 +112,18 @@ def look(venue: Kalshi, db, m: dict, now: float, stake: float, min_volume: float
     fills = simulate_buy(no, stake, limit=min(ask + 0.01, 0.99), fee_per_share=lambda p: mk.fee_rate * p * (1 - p))
     shares, px, _ = summarize(fills)
     fee = order_fee(mk.fee_rate, px, shares) if shares else 0.0
+    try:                                            # stand-alone question or one outcome of many? (report 3.19)
+        ev_markets = len((venue.http.get(f"/events/{d.get('event_ticker')}", tries=2) or {}).get("markets") or []) or None
+    except KalshiError:
+        ev_markets = None
     rest_px = no.best_bid                           # the price a resting NO order would join: 1 - the YES ask
     ahead = sum(q for p, q in no.bids if p >= rest_px - 1e-9) if rest_px else None
     db.execute("INSERT OR IGNORE INTO obs (ticker, event, category, title, seen_ts, end_ts, early, yes_bid, yes_ask, no_ask, "
-               "ask_contracts, ask_usd_1c, volume, stake, fill_px, fill_shares, fee, rest_px, rest_ahead, maker_rate) "
-               "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+               "ask_contracts, ask_usd_1c, volume, stake, fill_px, fill_shares, fee, rest_px, rest_ahead, maker_rate, ev_markets) "
+               "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                (ticker, d.get("event_ticker"), mk.category, mk.question[:200], now, end, 1 if d.get("can_close_early") else 0,
                 yes.best_bid, yes.best_ask, ask, at_ask, near, vol, stake, px if shares else None, shares, fee,
-                rest_px, ahead, getattr(mk, "maker_fee_rate", 0.0)))
+                rest_px, ahead, getattr(mk, "maker_fee_rate", 0.0), ev_markets))
     return "recorded"
 
 
@@ -221,7 +225,10 @@ def report(db) -> str:
 
     at_ask = [a * c for a, c, *_ in rows]
     near = [r[2] for r in rows]
-    lines = [f"{len(rows)} qualifying markets seen ({len({r[8] for r in rows})} categories)",
+    single = db.execute("SELECT COUNT(*) FROM obs WHERE ev_markets = 1").fetchone()[0]
+    known = db.execute("SELECT COUNT(*) FROM obs WHERE ev_markets IS NOT NULL").fetchone()[0]
+    lines = [f"{len(rows)} qualifying markets seen ({len({r[8] for r in rows})} categories)"
+             + (f"; {single} of the {known} with a known event size are stand-alone questions" if known else ""),
              f"dollars resting at the NO ask: 10/25/50/75th percentile ${q(at_ask, .10):,.0f} / ${q(at_ask, .25):,.0f} / "
              f"${q(at_ask, .50):,.0f} / ${q(at_ask, .75):,.0f}; within a cent of it: median ${q(near, .50):,.0f}",
              f"a ${rows[0][6]:.0f} order would have filled in full on {sum(1 for r in rows if r[3] and r[3] * r[4] + r[5] >= 0.9 * r[6]) / len(rows):.0%} "

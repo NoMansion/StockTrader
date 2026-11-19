@@ -280,6 +280,26 @@ def f_dear_side(f: Features):
         yield "26 dear side", f"YES where YES is at {name_range(100 - hi * 100, 100 - lo * 100, 'c')}", f.base & f.price(1 - hi, 1 - lo), "yes", entry
 
 
+# 28. Stand-alone questions (events the exchange listed with one market) against outcomes of larger events
+def f_standalone(f: Features):
+    bands = [(0, 0.03), (0.03, 0.06), (0.06, 0.10), (0.10, 0.20), (0.20, 0.35), (0.35, 0.50), (0.50, 0.65), (0.65, 0.80),
+             (0.80, 0.90), (0.90, 0.97), (0.97, 1.0)]
+    single = f.ev_total == 1
+    for (lo, hi), side, entry in itertools.product(bands, SIDES, ENTRIES):
+        tag = f"mid {name_range(lo * 100, hi * 100, 'c')}"
+        yield "28 stand-alone", f"single-market event: {tag}", f.base & single & f.price(lo, hi), side, entry
+        yield "28 stand-alone", f"multi-market event: {tag}", f.base & ~single & f.price(lo, hi), side, entry
+    for x, (d0, d1), entry in itertools.product((0.05, 0.10, 0.20, 0.35), [(0, 30), (30, 90), (90, 10000)], ENTRIES):
+        m = f.base & single & (f.mid > 0) & (f.mid <= x) & f.days(d0, d1)
+        yield "28 stand-alone", f"single-market event: NO where YES is {x * 100:g}c or less, {name_range(d0, d1, 'd')} to scheduled end", m, "no", entry
+    for x, smax, entry in itertools.product((0.05, 0.10, 0.20), (0.02, 0.05), ENTRIES):
+        m = f.base & single & (f.mid > 0) & (f.mid <= x) & (f.spread <= smax)
+        yield "28 stand-alone", f"single-market event: NO where YES is {x * 100:g}c or less, spread <= {smax * 100:g}c", m, "no", entry
+    for x, v0, entry in itertools.product((0.05, 0.10), (200, 2000), ENTRIES):
+        m = f.base & single & (f.mid > 0) & (f.mid <= x) & (f.dvol7 >= v0)
+        yield "28 stand-alone", f"single-market event: NO where YES is {x * 100:g}c or less, ${v0:g}+ traded in 7d", m, "no", entry
+
+
 # 14. Combinations of the single-factor conditions
 def f_combos(f: Features):
     price = [(0.03, 0.10), (0.10, 0.25), (0.25, 0.50), (0.50, 0.75), (0.75, 0.90), (0.90, 0.97)]
@@ -324,6 +344,7 @@ def all_rules(f: Features, titles: np.ndarray):
     yield from f_life(f)
     yield from f_longshot(f)
     yield from f_dear_side(f)
+    yield from f_standalone(f)
 
 
 # 11. Persistence: is a series that paid one side in the first half still paying it in the second?

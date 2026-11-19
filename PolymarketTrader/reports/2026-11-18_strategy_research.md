@@ -111,6 +111,7 @@ them loses. So the engine neither invents edges nor misses a planted one.
 | 25 | Longshot crosses | NO under 15c crossed with days left, momentum, volume, spread, favourite |
 | 26 | Dear side | The favourite-longshot bias as one rule: buy the expensive side when the cheap side is under x |
 | 27 | Event baskets | NO on every outcome of an event whose YES bids add up to more than 1 |
+| 28 | Stand-alone questions | Events listed with one market against outcomes of larger events: price bands, days, spread, volume |
 | 15 | Account replay | A rule's bets replayed through an account: lock-up, drawdown, return per year |
 | 17, 18 | Claude forecasts | Forward only, through the paper bot |
 
@@ -787,4 +788,35 @@ exchange listed in the event:
 **A correction to the measure.** "Markets in the event" used to count the markets present in the sample, so the
 one busy market of a thirty-outcome event counted as an event of one. It now counts the markets the exchange
 listed. The table above uses the corrected count; no earlier conclusion rested on the old one.
+
+### 3.20 Family 28: stand-alone questions (2:58 am CST, November 19)
+
+**Why.** 3.19 found the taker edge in events the exchange lists with a single market. This family tests that
+directly: 132 rules on single-market events (price bands on both sides; NO against a cheap YES by days left, by
+spread, by recent volume), with the same bands on multi-market events as a control. Seven categories, both
+samples.
+
+**Result: none can pass, because none has 100 events out of sample.** Kalshi lists few stand-alone questions now:
+of 1,561 in the busy sample, 245 closed after April 1, 2026. Every rule in the family is "thin" by the rule
+fixed before any result was seen.
+
+What the family shows without passing (busy sample; NO where YES is 5 cents or less):
+
+| Condition, single-market events | Entry | In sample (events) | t | Out of sample (events) | Lost out of sample |
+|---|---|---|---|---|---|
+| spread 5c or less | taker | +1.7% (608) | 4.6 | +2.3% (87) | 0 |
+| spread 5c or less | resting | +3.8% (503) | 8.2 | +4.1% (54) | 0 |
+| 30 days or less to the end | taker | +1.4% (551) | 4.4 | +2.0% (62) | 0 |
+| 30 to 90 days to the end | taker | +2.1% (325) | 6.4 | +2.7% (22) | 0 |
+| $200+ traded in the last 7 days | resting | +4.3% (280) | 8.0 | +4.2% (34) | 0 |
+| YES at 10c or less, 30 to 90 days | resting | +7.4% (352) | 15.6 | +7.6% (22) | 0 |
+
+- **In sample it is the strongest thing found tonight** (t of 4 to 16 on 280 to 600 events, every variant
+  positive), and since April 2026 every variant under 5 cents is positive with no loss. On the random sample the
+  same rules are positive in sample (+1% to +5%) and mixed after, on 5 to 44 events.
+- **It still does not pass**, and I am not going to move the split date or lower the 100-event bar to make it.
+  Honest reading: well supported before April 2026, consistent since, not proven, and with about 15 qualifying
+  questions a month across seven categories it is tiny.
+- **Forward.** The observation log now records how many markets each qualifying event has, so stand-alone
+  questions can be followed separately as they come.
 

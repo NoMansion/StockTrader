@@ -32,6 +32,7 @@ def test_only_markets_that_meet_the_rule_on_a_fresh_book_are_recorded(tmp_path):
     http, venue, listing, db = setup(tmp_path)
     res = sl.observe(venue, db, listing, {"economics"}, NOW, per_event=10)
     assert res["recorded"] == 1 and res["looked"] == 2                  # MID, THIN and FAR never cost a request
+    assert db.execute("SELECT ev_markets FROM obs").fetchone()[0] == 5   # the event's size is noted (five markets here)
     row = db.execute("SELECT ticker, yes_bid, no_ask, ask_contracts, fill_px, fill_shares, fee FROM obs").fetchone()
     assert row[0] == "LONG" and row[1:3] == pytest.approx((0.02, 0.98))
     assert row[3] == pytest.approx(400)                                 # the YES bids at 2c are the NO offers at 98c

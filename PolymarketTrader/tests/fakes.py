@@ -213,7 +213,8 @@ class FakeKalshiHTTP:
             return {"market": dict(self.markets[t])}
         if path.startswith("/events/"):
             return {"event": {"event_ticker": path.split("/")[2], "title": "CPI YoY in November", "category": "Economics",
-                              "settlement_sources": [{"name": "Bureau of Labor Statistics", "url": "https://www.bls.gov/cpi/"}]}}
+                              "settlement_sources": [{"name": "Bureau of Labor Statistics", "url": "https://www.bls.gov/cpi/"}]},
+                    "markets": [dict(m) for m in self.markets.values() if m.get("event_ticker") == path.split("/")[2]]}
         raise KalshiError(404, path, "not found")
 
     def pages(self, path: str, key: str, **params):
