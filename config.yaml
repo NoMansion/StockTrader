@@ -178,7 +178,16 @@ live:
   #           Compare fills with scripts/reconcile_fills.py after a few runs.
   # "opg" since 2026-11-13 (user decision after the bug audit): the backtests are re-baselined on next-open fills,
   # and Alpaca accepts auction orders only before 09:28 / after 19:00 ET, so run_daily waits for 19:01 ET to send.
+  # 2026-11-18: on the paper account ~97% of OPG orders EXPIRED unfilled at the open (11-13..11-17: 138 expired,
+  # 6 filled), so the account stopped following the model. The 11-18 evening orders were resent as "market"
+  # (DAY orders queue for the open and fill within minutes of it). From 11-19: "opg" again WITH the morning
+  # fallback (scripts/open_fallback.py, Task Scheduler "StockTrader Open Fallback", weekdays 8:32 am CT): every
+  # auction order that did not fill is resent as a market order within open_fallback_window_min of the open.
+  # The paper account proves the fallback (its auctions almost never fill); a real account gets the auction price
+  # whenever the auction works.
   order_type: "opg"
+  open_fallback: true
+  open_fallback_window_min: 60
   # Memory guard (src/memguard.py): the daily job is stopped, before any order is sent, if free RAM
   # falls below this many GB. An unguarded run froze the PC on 2026-11-11. null = off.
   min_free_gb: 1.0

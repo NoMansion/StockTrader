@@ -438,6 +438,11 @@ def main():
         del close, volume, raw_close, feats, labels, membership, gate_membership
         gc.collect()
         wait_for_opg_window()
+    try:   # for the live-vs-model snapshot (src/tracking.py); a failure here must not stop the orders
+        eq_before = broker.equity()
+        hold_before = broker.positions() / eq_before
+    except Exception:   # noqa: BLE001
+        eq_before, hold_before = None, None
     orders = broker.submit_targets(targets, prices_today, skip=skip)
     equity = broker.equity()
     cash = equity - float(broker.positions().sum())
@@ -463,6 +468,14 @@ def main():
     log = Path("data/orders.log")
     with open(log, "a") as f:
         f.write(json.dumps({"date": str(date.today()), "orders": orders}) + "\n")
+
+    try:   # live-vs-model tracking snapshot; never fails the run
+        from src.tracking import save_snapshot
+        if hold_before is None:
+            raise RuntimeError("account read before the orders failed")
+        save_snapshot(today, hold_before, targets, skip, eq_before)
+    except Exception as e:   # noqa: BLE001
+        log_error(f"tracking snapshot not saved on {today.date()}: {type(e).__name__}: {str(e)[:200]}")
 
 
 if __name__ == "__main__":
