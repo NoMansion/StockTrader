@@ -204,6 +204,11 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   `research/resting_variants.py`: 5 depths x 3 windows for the resting NO bid, all 15 pass the tail test in both
   halves (report 3.17): no setting to tune.
 
+- 12:58 am CST Nov 19 (check-in 15): Elections random pass complete, census at 22,000 contracts and descending.
+  Round r12 (report 3.18): Elections shows NO longshot effect of its own (0 pass; 5-cent rule +0.07% taker, +0.91%
+  resting, few bets). Four categories pooled at 23,000+: both versions pass the tail test in both halves.
+  Next: Elections to 5,000, then Health and World (small), then pooled five/six-category rounds at 5,150.
+
 ## How to run a round
 
 ```

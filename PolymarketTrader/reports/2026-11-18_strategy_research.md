@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 11:56 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 12:58 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics, Politics and Science and Technology at
@@ -22,6 +22,9 @@ round. Nothing here has been traded, on paper or otherwise.*
   per bet (+2.6% resting), but replayed it lost 3% a year with a 29% drawdown before April 2026, and counting
   each event once it earns nothing: its gains sit in a few events with dozens of outcomes (3.14, 3.17). The
   idea of correcting the forecast bot's starting price above 10 cents is not supported either.
+- **Elections, the fourth category, shows no effect of its own** (3.18): cheap YES there has been priced about
+  right since April 2026, and the 5-cent rule earns +0.1% (taker) to +0.9% (resting) per bet on few bets. Pooled
+  with the other three at 23,000+ contracts both versions still pass.
 - **A third flaw of mine, found at 11:55 pm (3.17):** the account replay took same-day bets losers first. Every
   replay figure in sections 3.8 to 3.16 is too pessimistic; the corrected ones are in 3.17 and in this list.
 - **No arbitrage across an event's outcomes** (3.15): where outcomes exclude each other, their bids add up to 1.00
@@ -713,4 +716,32 @@ fewer fills for more per fill and the account ends up in about the same place; l
 fills at no cost. So there is no setting to tune here, which is what a real effect looks like and a fitted one
 does not. (This table's replays differ a little from the one above for the same rule because the two programs
 break same-day ties differently; neither uses the outcome.)
+
+### 3.18 Round r12: Elections, a fourth category (12:58 am CST, November 19)
+
+**Data.** Kalshi's archive has Elections only from November 2024. Random sample complete: 2,511 markets in 1,244
+events. Busy sample at the level downloaded so far (23,000+ contracts; still descending to 5,000): 2,247 markets
+in 794 events.
+
+**Random: 0 pass, 0 leads** of 2,780. Paying the ask for YES loses at every price (−5% to −66%), as in Politics;
+NO earns nothing either.
+
+**Busy: 0 pass, 3 leads** of 2,756, none of them the longshot rule.
+
+| 5-cent rule, 23,000+ contracts | Elections, taker | Elections, resting | Four categories, taker | Four categories, resting |
+|---|---|---|---|---|
+| Bets, events | 255 in 169 | 170 in 115 | 1,923 in 1,059 | 1,493 in 858 |
+| Mean return per bet | +0.07% | +0.91% | +1.04% | +2.55% |
+| Losing events | 4 | 4 | 20 | 19 |
+| Tail test in / out of sample | fails / fails | fails / fails | passes / passes | passes / passes |
+| Replay at 1% stakes, before April 2026 / after | +0.5% / −1.4% a year | +1.0% / 0.0% | +0.9% / +12.1% | +3.3% / +23.1% |
+
+- **Elections does not show the effect.** Few bets qualify (election markets are long-dated; the rule wants 30
+  days or less to the end), and where they do, a YES at 3 cents happened about as often as its price said after
+  April 2026 (gap 0.0 points per market, −0.6 per event, against −1.3 and −1.4 in Economics and Politics).
+- **Category by category the rule is now: Economics yes; Politics and Science and Technology with resting orders
+  only, not proven alone; Elections no.** Pooled, it passes, because Economics and the busiest Politics markets
+  carry it.
+- **Volume matters more than category.** At 23,000+ contracts the pooled taker version passes the tail test in
+  both halves (+1.04% per bet); at 5,150+ it did not (+0.50%, 3.16).
 
