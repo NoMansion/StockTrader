@@ -29,9 +29,10 @@ sys.path.insert(0, str(ROOT))
 
 from src.kalshi_http import KalshiError, KalshiHTTP  # noqa: E402
 
-# In the order they are downloaded: the categories the paper bot trades first, the giant ones last.
-CATEGORIES = ["Economics", "Politics", "Companies", "Commodities", "Science and Technology", "Elections", "Health",
-              "World", "Financials", "Mentions", "Entertainment", "Crypto", "Social", "Climate and Weather", "Sports"]
+# In the order they are downloaded: the categories the paper bot trades first, the giant ones last. (Commodities
+# moved back on 2026-11-18: 264,000 markets, mostly daily price ranges the bot does not trade.)
+CATEGORIES = ["Economics", "Politics", "Companies", "Science and Technology", "Elections", "Health", "World",
+              "Commodities", "Financials", "Mentions", "Entertainment", "Crypto", "Social", "Climate and Weather", "Sports"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS series (ticker TEXT PRIMARY KEY, category TEXT, title TEXT, fee_type TEXT, fee_multiplier REAL,

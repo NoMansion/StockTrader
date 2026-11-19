@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 8:07 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 9:00 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics and Politics at 5,000+ contracts traded
@@ -19,6 +19,10 @@ round. Nothing here has been traded, on paper or otherwise.*
   of 1,054, tail test passed in both halves, +3.5% and +12.7% a year in the replay at 1% stakes). But its fills
   are modelled from daily highs and lows, not observed. Until fills are observed live, it is a hypothesis with
   good support, not a result.
+- **Only the narrow version survives as an account.** Buying NO against YES at up to 35 or 50 cents looks good
+  per bet (+2.6% resting) and loses money when replayed (−4.6% a year, 29% drawdown): its gains sit in a few
+  events with dozens of outcomes, which an account with a per-event cap cannot hold in full (3.14). The same
+  goes for the idea of correcting the forecast bot's starting price above 10 cents: not supported.
 - **It is small either way.** Each bet risks about 96 cents to make 2 to 4. On a $1,000 account this is tens of
   dollars a year. It is not in the paper bot (section 3.9).
 - **Nothing passes on a random sample of all markets** (3.6, 3.12). The exchange as a whole is priced about
@@ -543,3 +547,44 @@ traded through that price, or took everything queued ahead of it plus the order 
 hours after the first 11 observations: 2 filled, both by a trade through the price, which is the bad kind of
 fill (YES was rising). Their outcomes, and the fill rate against the model's 55% to 60%, will take days to
 weeks to mean anything.
+
+### 3.14 Wider bands fail as an account; so does the price correction above 10 cents (9:00 pm CST)
+
+**Why look.** At 5,000+ contracts a resting NO order earned +1.5% to +4% per bet in every band under 50 cents
+(3.13), which suggests a much bigger rule than the 5-cent one: rest NO bids against any cheap YES. Sample: both
+categories, 5,150+ contracts.
+
+| Rule, resting order | Bets | Mean per bet | Replay at 1% stakes, before April 2026 | After | Worst drawdown |
+|---|---|---|---|---|---|
+| NO where YES is 35c or less, any time | 4,868 | +2.61% | −4.6% a year | −9.6% a year | 28.7% |
+| NO where YES is 5 to 35c | 3,953 | +2.85% | −5.4% a year | +0.1% a year | 30.6% |
+| NO where YES is 10c or less, 30 days or less | 2,554 | +2.42% | +5.6% a year | +11.0% a year | 6.7% |
+| NO where YES is 5c or less, 30 days or less (3.13) | 1,993 | +2.11% | +3.5% a year | +12.7% a year | 3.1% |
+
+**A positive mean per bet and a losing account.** The mean counts every market. The account cannot: it caps
+each event at 3% of equity and has half its money locked for weeks (median holding 20 days, mean 55). The bets
+it has to skip are the many outcomes of a few very large events, "who will be the next ..." with thirty names,
+where buying NO on every longshot wins twenty-nine times by construction. Count each event once and the wide
+rules earn nothing: their event-weighted t out of sample is −0.6 and −0.8. This is what the second statistic in
+the pass test is for, and it is why these rules were "leads" and not passes.
+
+**The same correction applied to section 3.10.** Price against outcome with each event counted once, 5,150+
+contracts, both categories (gap in percentage points; t in brackets):
+
+| YES mid | In sample, per market | In sample, per event | Out of sample, per market | Out of sample, per event |
+|---|---|---|---|---|
+| 0 to 5c | −1.6 (−4.9) | −1.7 (−4.7) | −1.3 (−3.6) | −1.4 (−2.9) |
+| 5 to 10c | −2.3 (−3.3) | −3.4 (−6.0) | −1.7 (−2.1) | −1.4 (−1.4) |
+| 10 to 20c | −2.7 (−2.8) | −4.4 (−5.1) | −1.8 (−1.5) | −0.7 (−0.5) |
+| 20 to 35c | −3.7 (−2.8) | −6.2 (−5.2) | −2.9 (−1.6) | −1.6 (−0.9) |
+| 35 to 50c | −2.7 (−1.6) | −3.9 (−2.6) | −3.1 (−1.3) | −1.7 (−0.8) |
+
+- **Under 5 cents the overpricing is solid however it is counted:** a YES at 3.3 cents happened about 1.9% of the
+  time, in both halves.
+- **Above 10 cents it was there before April 2026 and is not distinguishable from zero since.** The idea in 3.10
+  of starting the forecast bot from a corrected price for YES under 35 cents is withdrawn.
+
+**Companies** finished downloading and is too small to judge: 225 markets in 79 events, 11 of them out of
+sample. It will only count pooled with the rest. **Commodities** (264,635 markets, mostly daily price ranges the
+bot does not trade) was moved behind Science and Technology, Elections, Health and World.
+

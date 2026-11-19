@@ -3,7 +3,9 @@
     python research/calibration_curve.py --sample liquid --min-cumvol 45000 --categories Economics,Politics
 
 One observation per market per band: the first tradable bar at which the mid was in the band. `gap` is outcome
-minus mid (negative: YES was priced too high); its standard error is clustered by event. Fees and spreads play
+minus mid (negative: YES was priced too high); its standard error is clustered by event. `ev_gap` is the same
+with each event counted once, however many markets it has: an event with thirty longshot outcomes otherwise
+counts thirty times. Fees and spreads play
 no part here: this is about the level of the price, not about what a trade would have earned.
 """
 import argparse
@@ -33,9 +35,12 @@ def curve(p: Panel, f: Features, bands=PRICE) -> pd.DataFrame:
             ev = d.groupby("event")["gap"].agg(["sum", "size"])
             k = len(ev)
             se = np.sqrt(((ev["sum"] - d["gap"].mean() * ev["size"]) ** 2).sum()) / len(d) * (np.sqrt(k / (k - 1)) if k > 1 else np.nan)
+            per_event = ev["sum"] / ev["size"]              # each event counts once, however many markets it has
+            ev_se = per_event.std(ddof=1) / np.sqrt(k) if k > 1 else np.nan
             rows.append({"band": f"{lo * 100:g}-{hi * 100:g}c", "half": label, "markets": len(d), "events": k,
                          "mean_mid": mid[part].mean(), "yes_rate": p.y[part].mean(), "gap": d["gap"].mean(),
-                         "t": d["gap"].mean() / se if se and se > 0 else np.nan})
+                         "t": d["gap"].mean() / se if se and se > 0 else np.nan, "ev_gap": per_event.mean(),
+                         "ev_t": per_event.mean() / ev_se if ev_se and ev_se > 0 else np.nan})
     return pd.DataFrame(rows)
 
 
@@ -55,7 +60,8 @@ def main() -> int:
     c = curve(p, Features(p))
     pd.set_option("display.width", 200)
     print(c.to_string(index=False, formatters={"mean_mid": "{:.3f}".format, "yes_rate": "{:.3f}".format,
-                                               "gap": "{:+.3f}".format, "t": "{:+.1f}".format}))
+                                               "gap": "{:+.3f}".format, "t": "{:+.1f}".format,
+                                               "ev_gap": "{:+.3f}".format, "ev_t": "{:+.1f}".format}))
     return 0
 
 
