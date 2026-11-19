@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 9:00 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 8:55 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics and Politics at 5,000+ contracts traded
@@ -548,7 +548,7 @@ hours after the first 11 observations: 2 filled, both by a trade through the pri
 fill (YES was rising). Their outcomes, and the fill rate against the model's 55% to 60%, will take days to
 weeks to mean anything.
 
-### 3.14 Wider bands fail as an account; so does the price correction above 10 cents (9:00 pm CST)
+### 3.14 Wider bands fail as an account; so does the price correction above 10 cents (8:55 pm CST)
 
 **Why look.** At 5,000+ contracts a resting NO order earned +1.5% to +4% per bet in every band under 50 cents
 (3.13), which suggests a much bigger rule than the 5-cent one: rest NO bids against any cheap YES. Sample: both

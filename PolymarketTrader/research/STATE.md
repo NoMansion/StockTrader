@@ -175,7 +175,7 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   3-day window). `--report` prints the fill rate and, once settled, the return of the filled ones: quote it in
   the report at each check-in once more than about 20 are decided.
 
-- 9:00 pm CST (check-in 11): Companies too small (79 events). Commodities moved behind the bot's categories;
+- 8:55 pm CST (check-in 11): Companies too small (79 events). Commodities moved behind the bot's categories;
   download now on Science and Technology. Report 3.14: the WIDE resting rules (NO against YES up to 35-50c) have
   positive means per bet but LOSE in the account replay (gains sit in huge multi-outcome events; event-weighted
   t negative). Calibration gap per event: solid under 5c, gone above 10c out of sample: the "corrected starting
