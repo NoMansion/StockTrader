@@ -132,7 +132,7 @@ def f_momentum(f: Features):
 
 # 5. Deadline markets ("before ...", "by ..."): do they drift to No?
 def f_deadline(f: Features, titles: np.ndarray):
-    dead = np.array([bool(re.search(r"\b(before|by)\b", t or "", re.I)) for t in titles])
+    dead = np.array([bool(re.search(r"\b(before|by)\b", t if isinstance(t, str) else "", re.I)) for t in titles])
     for (lo, hi), (d0, d1), entry in itertools.product([(0.05, 0.2), (0.2, 0.5), (0.5, 0.8), (0.05, 0.95)], [(0, 7), (7, 30), (30, 10000)], ENTRIES):
         m = f.base & f.price(lo, hi) & f.days(d0, d1)
         tag = f"mid {name_range(lo * 100, hi * 100, 'c')}, {name_range(d0, d1, 'd')} to close"

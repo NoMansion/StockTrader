@@ -4,21 +4,19 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 10:06 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 10:58 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
-  whoever rests orders, not to whoever pays the ask.** Across Economics and Politics at 5,000+ contracts traded
-  (10,909 markets, 3,172 events), all 26 rules that pass and 116 of the 117 leads are "buy NO". Sections 3.7 to
-  3.13.
-- **The simple version, pay the ask for NO where YES is at 5 cents or less, works only in part of that.** In
-  Economics it earned about +1.3% per bet at both volume levels tested and passes the tail test. In Politics it
-  passes only in the very busiest markets; at 5,000+ contracts it earned +0.1% per bet and lost money in the
-  account replay. Both categories together at that level: +0.6% per bet, and a small loss in the replay for
-  April to September 2026.
-- **The resting-order version passes everywhere tested** (+2.1% per bet across both categories, 39 losing events
-  of 1,054, tail test passed in both halves, +3.5% and +12.7% a year in the replay at 1% stakes). But its fills
-  are modelled from daily highs and lows, not observed. Until fills are observed live, it is a hypothesis with
-  good support, not a result.
+  whoever rests orders, not to whoever pays the ask.** Across Economics, Politics and Science and Technology at
+  5,000+ contracts traded (12,468 markets, 3,589 events), all 34 rules that pass buy NO. Sections 3.7 to 3.16.
+- **Paying the ask for NO where YES is at 5 cents or less works in Economics only.** There it earned about +1.3%
+  per bet at both volume levels tested and passes the tail test. In Politics it earned +0.1% per bet, in Science
+  and Technology +0.1%; the three together +0.5% per bet with a small loss in the account replay.
+- **The resting-order version passes on the three categories pooled** (+2.0% per bet, 49 losing events of 1,270,
+  tail test passed in both halves, +3.1% and +11.4% a year in the replay at 1% stakes), and in Economics alone.
+  In Politics alone and in Science and Technology alone it is positive but not proven. Its fills are modelled
+  from daily highs and lows, not observed: until the forward log has observed them (3.13), it is a hypothesis
+  with good support, not a result.
 - **Only the narrow version survives as an account.** Buying NO against YES at up to 35 or 50 cents looks good
   per bet (+2.6% resting) and loses money when replayed (−4.6% a year, 29% drawdown): its gains sit in a few
   events with dozens of outcomes, which an account with a per-event cap cannot hold in full (3.14). The same
@@ -31,10 +29,10 @@ round. Nothing here has been traded, on paper or otherwise.*
   right; the mispricing is where the volume is (3.10).
 - **Two flaws of mine found and fixed on the way:** markets chosen by lifetime volume (3.5), and "days to close"
   measured from a close date not knowable in advance (3.7). Rounds 3.1 to 3.5 are superseded.
-- **Forward test of Claude's forecasts:** three paper cycles, 12 forecasts, 9 of them low-confidence and not
-  traded, one resting paper order, account at $1,000 (`reports/forward_log.csv`).
-- **Still to come:** Companies is downloading now; then Commodities, Science and Technology, Elections, Health,
-  World.
+- **Forward test of Claude's forecasts:** four paper cycles, 16 forecasts, most of them low-confidence and not
+  traded, three resting paper orders, none filled, account at $1,000 (`reports/forward_log.csv`).
+- **Still to come:** Elections is downloading now (2,601 series to list, about an hour and a half), then Health
+  and World; Commodities, Financials and the rest after those.
 
 ## 1. Method
 
@@ -617,4 +615,37 @@ next day's opening quote with the taker fee; result is what the basket actually 
 - Verdict: nothing here. It also explains 3.14 from another side: inside a large exclusive event the outcomes
   are priced consistently with each other, so the longshot overpricing there is a few tenths of a cent per
   outcome, real per bet and too thin to carry an account.
+
+### 3.16 Round r11: Science and Technology, a third category (10:58 pm CST)
+
+**Data.** Science and Technology is small enough to have been downloaded almost whole: 3,893 of its 3,906 traded
+markets. Random sample 3,850 markets in 637 events; busy sample (5,150+ contracts) 1,559 markets in 417 events.
+It is a 2026 category: three quarters of its markets closed after April 1.
+
+**Random sample: 0 pass, 0 leads** in 2,756 rules. The two halves disagree in sign almost everywhere (NO at 20
+to 80 cents: +2% to +17% before April, −20% to −43% after), which is what noise from a few large event families
+looks like.
+
+**Busy sample: 0 pass, 11 leads, all resting NO where YES is cheap** (+3% to +5% out of sample, +0.1% to +3.6%
+in). Too few events for anything to pass alone (about 140 in, 100 out).
+
+| 5-cent rule, 5,150+ contracts | Sci & Tech, taker | Sci & Tech, resting | Three categories, taker | Three categories, resting |
+|---|---|---|---|---|
+| Bets, events | 519 in 250 | 397 in 216 | 3,265 in 1,613 | 2,390 in 1,270 |
+| Mean return per bet | +0.08% | +1.32% | +0.50% | +1.98% |
+| Losing events | 10 | 10 | 52 | 49 |
+| Tail test in / out of sample | fails / fails | fails / fails | fails / fails | passes / passes |
+| Replay at 1% stakes, before April 2026 / after | −0.6% / +2.0% a year | +0.1% / +5.3% | −0.7% / −2.9% | +3.1% / +11.4% |
+
+- **Third category, same picture as Politics:** paying the ask earns nothing; resting earns something, not enough
+  events to prove it alone.
+- **Pooled over three categories the resting version passes in both halves** with 1,270 events, and the taker
+  version fails in both. This is now the firm shape of the result.
+- **Scale, pooled, resting, 1% stakes:** 916 bets in four and a half years before April 2026, 653 in the half
+  year after. Kalshi's growth in 2026 is why the recent replay earns four times the earlier one: more qualifying
+  markets, so more of the account is at work (33% against 7%).
+
+**Paper cycle at 10:03 pm.** Two new resting paper orders from Claude's forecasts: buy YES $20 at 70c on
+`KXTRUMPACT-26NOV15-T2` (Claude's blended 77%), buy NO $20 at 40c on `KXCBDHUNGARY-26DEC15-C25` (blended 47% for
+NO). Three resting orders in all, none filled.
 
