@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 12:10 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 11:56 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics, Politics and Science and Technology at
@@ -22,7 +22,7 @@ round. Nothing here has been traded, on paper or otherwise.*
   per bet (+2.6% resting), but replayed it lost 3% a year with a 29% drawdown before April 2026, and counting
   each event once it earns nothing: its gains sit in a few events with dozens of outcomes (3.14, 3.17). The
   idea of correcting the forecast bot's starting price above 10 cents is not supported either.
-- **A third flaw of mine, found at midnight (3.17):** the account replay took same-day bets losers first. Every
+- **A third flaw of mine, found at 11:55 pm (3.17):** the account replay took same-day bets losers first. Every
   replay figure in sections 3.8 to 3.16 is too pessimistic; the corrected ones are in 3.17 and in this list.
 - **No arbitrage across an event's outcomes** (3.15): where outcomes exclude each other, their bids add up to 1.00
   to 1.02, and the fee takes the rest.
@@ -656,7 +656,7 @@ in). Too few events for anything to pass alone (about 140 in, 100 out).
 `KXTRUMPACT-26NOV15-T2` (Claude's blended 77%), buy NO $20 at 40c on `KXCBDHUNGARY-26DEC15-C25` (blended 47% for
 NO). Three resting orders in all, none filled.
 
-### 3.17 A flaw in the account replay, corrected; and where to rest the order (12:10 am CST, November 19)
+### 3.17 A flaw in the account replay, corrected; and where to rest the order (11:56 pm CST)
 
 **The flaw.** `research/portfolio.py` replays a rule's bets in time order through an account with a cap per
 event. Bets entered on the same day were ordered by their eventual return, lowest first. With a cap of three bets
