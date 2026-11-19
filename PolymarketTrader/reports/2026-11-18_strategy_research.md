@@ -4,25 +4,31 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 6:52 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 8:12 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
-- **One mechanical result has held up: in busy markets, cheap YES contracts are overpriced, and buying NO
-  against them has paid.** Where YES is quoted at 5 cents or less in a market that has already traded 45,000
-  contracts, buying NO earned about +1.4% per bet paying the ask and about +3% with a resting order, positive in
-  both halves of the data, with 7 losing events out of 524. It matches published work on Kalshi. Sections 3.7
-  and 3.8. **Qualifier (3.12):** in Economics it holds with either entry at two volume levels; in Politics alone
-  it holds only with resting orders, and paying the ask lost money there in 2025.
-- **It is small and lopsided.** Each bet risks about 97 cents to make 2 or 3. Replayed through an account at 1%
-  stakes it returned about 1% a year before 2026 and about 9% a year in the last six months, with a fifth of the
-  money at work. On a $1,000 account that is tens of dollars a year. It is not yet in the paper bot (section 3.9).
-- **Nothing else passes.** On a random sample of all markets no rule passes, and the "expensive side loses"
-  pattern of rounds 3.2 to 3.5 is gone: it came from the way those markets were chosen (section 3.6).
-- **Two flaws of mine found and fixed today:** markets chosen by lifetime volume (3.5), and "days to close"
-  measured from a close date that was not knowable in advance (3.7). Rounds 3.1 to 3.5 are superseded.
-- **Forward test of Claude's forecasts:** two paper cycles, 8 forecasts, 6 of them low-confidence and not
+- **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
+  whoever rests orders, not to whoever pays the ask.** Across Economics and Politics at 5,000+ contracts traded
+  (10,909 markets, 3,172 events), all 26 rules that pass and 116 of the 117 leads are "buy NO". Sections 3.7 to
+  3.13.
+- **The simple version, pay the ask for NO where YES is at 5 cents or less, works only in part of that.** In
+  Economics it earned about +1.3% per bet at both volume levels tested and passes the tail test. In Politics it
+  passes only in the very busiest markets; at 5,000+ contracts it earned +0.1% per bet and lost money in the
+  account replay. Both categories together at that level: +0.6% per bet, and a small loss in the replay for
+  April to September 2026.
+- **The resting-order version passes everywhere tested** (+2.1% per bet across both categories, 39 losing events
+  of 1,054, tail test passed in both halves, +3.5% and +12.7% a year in the replay at 1% stakes). But its fills
+  are modelled from daily highs and lows, not observed. Until fills are observed live, it is a hypothesis with
+  good support, not a result.
+- **It is small either way.** Each bet risks about 96 cents to make 2 to 4. On a $1,000 account this is tens of
+  dollars a year. It is not in the paper bot (section 3.9).
+- **Nothing passes on a random sample of all markets** (3.6, 3.12). The exchange as a whole is priced about
+  right; the mispricing is where the volume is (3.10).
+- **Two flaws of mine found and fixed on the way:** markets chosen by lifetime volume (3.5), and "days to close"
+  measured from a close date not knowable in advance (3.7). Rounds 3.1 to 3.5 are superseded.
+- **Forward test of Claude's forecasts:** three paper cycles, 12 forecasts, 9 of them low-confidence and not
   traded, one resting paper order, account at $1,000 (`reports/forward_log.csv`).
-- **Still to come:** Companies, Commodities, Science and Technology, Elections, Health and World are
-  downloading in that order; each gets the same rounds.
+- **Still to come:** Companies is downloading now; then Commodities, Science and Technology, Elections, Health,
+  World.
 
 ## 1. Method
 
@@ -486,4 +492,49 @@ that buys YES passes or leads anywhere.
 
 **Housekeeping.** The container restarted a second time at about 6:40 pm CST. Data intact; jobs restarted within
 a minute.
+
+### 3.13 Round r10: both categories at 5,000 contracts; the taker version does not survive in Politics (8:12 pm CST)
+
+**Data.** The Politics census is complete down to 5,000 contracts: 5,620 markets in 1,775 events. With
+Economics: 10,909 markets, 3,172 events, 362,482 daily bars, 4,388 markets out of sample. 2,957 rules: 26 pass,
+117 leads, 172 reliably lose. All 26 passes and 116 of the leads buy NO.
+
+| YES price (5,150+ contracts, both categories) | YES taker in / out | NO taker in / out | NO resting in / out | Events in / out |
+|---|---|---|---|---|
+| 0 to 5c | −64.4% / −58.2% | +0.3% / +0.3% | +2.2% / +1.5% | 1,076 / 540 |
+| 5 to 10c | −45.7% / −36.6% | 0.0% / 0.0% | +2.7% / +1.7% | 1,038 / 479 |
+| 10 to 20c | −30.0% / −23.5% | 0.0% / −0.4% | +2.9% / +1.5% | 1,052 / 472 |
+| 20 to 35c | −23.7% / −19.0% | +0.3% / +0.4% | +4.1% / +2.3% | 960 / 433 |
+| 35 to 50c | −14.7% / −14.2% | −2.1% / −0.1% | +1.7% / +1.4% | 822 / 390 |
+
+At this level, paying the ask for NO is worth nothing in any band: the overpricing of YES is about the size of
+the spread plus the fee. A resting NO order keeps the spread and earns 1.5% to 4%.
+
+**The 5-cent rule at 5,150+ contracts.**
+
+| | Politics, taker | Politics, resting | Both, taker | Both, resting |
+|---|---|---|---|---|
+| Bets, events | 1,670 in 809 | 1,207 in 614 | 2,746 in 1,363 | 1,993 in 1,054 |
+| Mean return per bet | +0.14% | +1.31% | +0.58% | +2.11% |
+| Losing events | 33 | 32 | 42 | 39 |
+| Tail test in / out of sample | fails / fails | passes / fails | passes / fails | passes / passes |
+| 2025 alone | −1.8% per bet | −0.9% | −0.4% | +1.4% |
+| Replay at 1% stakes, before April 2026 / after | −0.7% / −1.2% a year | +0.9% / +3.8% | +0.3% / −3.3% | +3.5% / +12.7% |
+
+- **Politics, paying the ask: no edge.** 33 losing events in 809 (4.1%) against a break-even of 4.4%.
+- **Economics carries the taker result** (3.11): +1.27% per bet, tail test passed, at the same volume level.
+- **The resting version passes on the pooled sample and in Economics; in Politics alone it passes in sample and
+  not out.**
+- **Reading the whole evening together:** the edge grows with how much a market has traded (45,000+ contracts:
+  3.8; 15,000+: 3.12; 5,000+: here; everything: 3.6) and is larger in Economics than in Politics. That is the
+  pattern "Makers and Takers" describes: takers, who mostly buy YES and mostly buy cheap contracts, pay; the
+  resting side collects.
+
+**Also checked: the last days before the end are not special.** NO where YES is at 5 to 20 cents with one to
+three days to the scheduled end earns +0.5% to +1.5% paying the ask on the busy sample, not significant. The
+edge is not concentrated at the close, so hourly bars for the final days are dropped from the list.
+
+**What this changes in the plan.** The question that decides whether any of this is usable is whether a small
+resting NO order really gets filled at those prices, and how often it is filled only when it is about to lose.
+The backtest cannot answer that. The forward observation log is being extended to track it with real trades.
 
