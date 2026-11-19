@@ -189,6 +189,10 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   "by December"). Fetching Kalshi's own `mutually_exclusive` flag for the candidate events (file `data/kalshi_events.db`) to
   test the exclusive ones alone: result goes in the report as 3.15.
 
+- 10:06 pm CST: family 27 done (report 3.15). With Kalshi's flag (154 of 405 candidate events are exclusive):
+  bids of an exclusive event's outcomes add up to 1.00-1.02, basket locked at about -0.9% after fees; reached
+  1.05 once in five years. No arbitrage. Flags are in `data/kalshi_events.db` (not committed).
+
 ## How to run a round
 
 ```

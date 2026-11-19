@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 8:55 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 10:06 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics and Politics at 5,000+ contracts traded
@@ -23,6 +23,8 @@ round. Nothing here has been traded, on paper or otherwise.*
   per bet (+2.6% resting) and loses money when replayed (−4.6% a year, 29% drawdown): its gains sit in a few
   events with dozens of outcomes, which an account with a per-event cap cannot hold in full (3.14). The same
   goes for the idea of correcting the forecast bot's starting price above 10 cents: not supported.
+- **No arbitrage across an event's outcomes** (3.15): where outcomes exclude each other, their bids add up to 1.00
+  to 1.02, and the fee takes the rest.
 - **It is small either way.** Each bet risks about 96 cents to make 2 to 4. On a $1,000 account this is tens of
   dollars a year. It is not in the paper bot (section 3.9).
 - **Nothing passes on a random sample of all markets** (3.6, 3.12). The exchange as a whole is priced about
@@ -105,6 +107,7 @@ them loses. So the engine neither invents edges nor misses a planted one.
 | 24 | Share of life | Price bands by how much of the scheduled life has passed |
 | 25 | Longshot crosses | NO under 15c crossed with days left, momentum, volume, spread, favourite |
 | 26 | Dear side | The favourite-longshot bias as one rule: buy the expensive side when the cheap side is under x |
+| 27 | Event baskets | NO on every outcome of an event whose YES bids add up to more than 1 |
 | 15 | Account replay | A rule's bets replayed through an account: lock-up, drawdown, return per year |
 | 17, 18 | Claude forecasts | Forward only, through the paper bot |
 
@@ -587,4 +590,31 @@ contracts, both categories (gap in percentage points; t in brackets):
 **Companies** finished downloading and is too small to judge: 225 markets in 79 events, 11 of them out of
 sample. It will only count pooled with the rest. **Commodities** (264,635 markets, mostly daily price ranges the
 bot does not trade) was moved behind Science and Technology, Elections, Health and World.
+
+### 3.15 Family 27: baskets across an event's outcomes. No free money (10:06 pm CST)
+
+**The idea.** If the outcomes of an event exclude each other, at most one YES wins, so NO on n of them pays at
+least n − 1. If the YES bids of those n add up to more than 1 plus fees, the basket is a locked profit.
+
+**Test** (`research/event_baskets.py`). Busy sample, both categories, events without numeric strikes. Basket
+formed on the first day the closing bids of the legs present add up to the threshold; every leg bought at the
+next day's opening quote with the taker fee; result is what the basket actually paid. Kalshi's own
+"mutually exclusive" flag was fetched for all 405 candidate events: 154 are exclusive, 251 are not.
+
+| Bids add up to | Exclusive events: baskets in / out | Mean return in / out | Worst | Not exclusive: mean in / out |
+|---|---|---|---|---|
+| 0.90 or more | 92 / 62 | −3.5% / −0.6% | −11.8% | the "lock" does not exist; most lose |
+| 1.00 or more | 33 / 29 | −0.9% / −0.9% | −3.3% | |
+| 1.02 or more | 3 / 9 | −0.2% / −0.5% | −1.4% | |
+| 1.05 or more | 1 / 0 | +0.2% | | |
+
+- **Exclusive events are priced tightly.** In five years of busy Economics and Politics markets the bids of an
+  exclusive event's outcomes reached 1.05 once. At 1.00 to 1.02 the basket is locked, at a small loss: the
+  taker fee on every leg is more than the excess.
+- **Events that only look exclusive are a trap.** "Before June?" and "before December?" have no numeric strike
+  and their bids add up to well over 1, but both can be yes. Treating those as a lock lost on 191 of 264 baskets
+  in sample. Any rule of this kind must read Kalshi's flag, never infer it.
+- Verdict: nothing here. It also explains 3.14 from another side: inside a large exclusive event the outcomes
+  are priced consistently with each other, so the longshot overpricing there is a few tenths of a cent per
+  outcome, real per bet and too thin to carry an account.
 
