@@ -4,13 +4,14 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 4:40 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 6:55 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **One mechanical result has held up: in busy markets, cheap YES contracts are overpriced, and buying NO
   against them has paid.** Where YES is quoted at 5 cents or less in a market that has already traded 45,000
   contracts, buying NO earned about +1.4% per bet paying the ask and about +3% with a resting order, positive in
-  both halves of the data, in Economics and in Politics, with 7 losing events out of 524. It matches published
-  work on Kalshi. Sections 3.7 and 3.8.
+  both halves of the data, with 7 losing events out of 524. It matches published work on Kalshi. Sections 3.7
+  and 3.8. **Qualifier (3.12):** in Economics it holds with either entry at two volume levels; in Politics alone
+  it holds only with resting orders, and paying the ask lost money there in 2025.
 - **It is small and lopsided.** Each bet risks about 97 cents to make 2 or 3. Replayed through an account at 1%
   stakes it returned about 1% a year before 2026 and about 9% a year in the last six months, with a fifth of the
   money at work. On a $1,000 account that is tens of dollars a year. It is not yet in the paper bot (section 3.9).
@@ -438,4 +439,51 @@ questions where X then happened: a veto, a resignation, a White House visit, a t
 
 **Housekeeping.** The session's container was restarted at about 5:45 pm CST. The data survived; the download
 and the paper loop were restarted within two minutes.
+
+### 3.12 Round r09: Politics in full, and a weaker result there (6:55 pm CST)
+
+**Data.** The random Politics draw is complete (2,744 markets, 1,400 events). The Politics census has reached
+15,000 contracts and is still going down: 3,342 Politics markets in 1,209 events at that level, 6,323 markets in
+1,994 events with Economics.
+
+**Random Politics: 1 pass in 2,780 rules,** about what chance gives. YES is overpriced at every price (paying the
+ask for YES lost 4% to 65% in both halves), but paying the ask for NO only breaks even, because the quotes are
+wide. The pass and the three leads next to it are one idea: NO where YES is at 10 to 20 cents or less with two or
+three days to the scheduled end (+1.9% / +2.1%).
+
+**Busy markets at 15,000 contracts, both categories: 60 pass, 100 leads, every one of them "buy NO".** No rule
+that buys YES passes or leads anywhere.
+
+| YES price (15,000+ contracts) | NO taker in / out | NO resting in / out | Events in / out |
+|---|---|---|---|
+| 0 to 5c | +0.7% / +1.1% | +2.6% / +2.7% | 730 / 323 |
+| 5 to 10c | +0.2% / +2.1% | +3.1% / +4.5% | 681 / 263 |
+| 10 to 20c | +0.2% / +0.5% | +3.5% / +2.5% | 652 / 259 |
+| 20 to 35c | +0.4% / +1.8% | +5.1% / +5.2% | 599 / 240 |
+| 35 to 50c | +2.2% / −0.5% | +6.6% / +2.5% | 515 / 209 |
+
+**The 5-cent rule on Politics alone is weaker than on Economics.**
+
+| 5-cent rule, Politics, 15,000+ contracts | Taker | Resting order |
+|---|---|---|
+| Bets, events | 1,027 in 535 | 797 in 428 |
+| Mean return per bet | +0.79% | +2.28% |
+| Losing events in / out of sample | 10 of 380 / 4 of 176 | 9 of 298 / 4 of 148 |
+| Break-even loss rate; 95% upper bound, in sample | 3.7%; 4.4%: **not** below | 6.8%; 5.2% |
+| The same, out of sample | 4.5%; 5.1%: **not** below | 7.0%; 6.1% |
+| 2025 alone | 270 bets, 10 lost, −1.6% per bet | 203 bets, 9 lost, −0.4% per bet |
+| Account replay at 1% stakes, before April 2026 / after | 0.0% a year, drawdown 5.9% / +7.9% a year | +1.2% / +12.8% a year |
+
+- **Paying the ask does not pass the tail test in Politics**, in either half. The observed loss rate (2.6%) is
+  below break-even (4.1%), but with 14 losing events the data cannot rule out a true rate above it. In 2025 the
+  rule lost money in Politics.
+- **The resting-order version passes**, and its margin is what makes the difference: it buys a cent or two
+  cheaper. That margin rests on a fill model, not on observed fills.
+- **So the statement in the status section needs its qualifier:** the rule is supported in Economics by both
+  entries at two volume levels (3.8, 3.11); in Politics only with resting orders. Politics questions are
+  "will X happen before a date", where the cheap YES is a real event that sometimes happens, in clusters
+  (the first months of a new administration, 2025, are where the losses are).
+
+**Housekeeping.** The container restarted a second time at about 6:40 pm CST. Data intact; jobs restarted within
+a minute.
 

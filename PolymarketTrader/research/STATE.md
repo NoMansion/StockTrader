@@ -160,6 +160,12 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   Idea for the backlog: cap the rule's exposure per release month / per underlying statistic, and test whether
   skipping "data release above X" thresholds within N standard moves helps (needs the release history; later).
 
+- 6:55 pm CST (check-in 9): second container restart about 6:40 pm, data intact. Round r09 (report 3.12):
+  random Politics complete, 1 pass of 2,780 (chance). Busy at 15,000 contracts, both categories: 60 pass, all
+  buy-NO. BUT the 5-cent rule as a TAKER fails the tail test on Politics alone (2025: -1.6% per bet); resting
+  passes. Politics census still descending from 14,452 to 5,000: re-run `--sample liquid --categories Politics`
+  when `research/panel.py`-level check shows it complete, then Companies.
+
 ## How to run a round
 
 ```
