@@ -724,3 +724,26 @@ Live model to beat: 1.479 flat / 1.437 under the measured cost-by-rank schedule.
   | 4,000 | 1.472 | 1.406 | 1.906 | 16.2% | -16.1% |
 
 - **Reading.** 3,500 is +0.025 flat and +0.015 under costs, inside the noise and under the bar. 4,000 is worse, mostly once costs count, because ranks above 3,000 pay the schedule's top bucket. The live 3,000 sits on a flat top. No change. The sweep is stopped again; the 4,000-stock runs ran one at a time with at least 1.6 GB of RAM free and no watchdog kills.
+
+### 8.25 Wednesday 2026-11-18, 2:25 pm: how much of the backtest is selection luck?
+
+The live model was picked from thousands of variants run on the same 2001-2026 history, so its 1.479 is partly luck. These checks use only existing sweep results; no new runs were needed. The trial set is 802 realistic-timing variants (rounds 49-74 and the timing reruns). It leaves out cost-stress copies and the NFCI variants, whose data was revised after the fact. It also leaves out the earlier rounds (1-48), which picked the signal families on the old fill timing, so all numbers below are somewhat optimistic.
+
+- **The live model vs the field.** Over the common window (April 2001 to November 2026) the live model scores 1.484 and ranks 6th of 802. The best is 3,500 stocks at 1.522 (round 74), and the median variant scores 1.249. The variants are highly correlated (average 0.91): on their returns relative to the field average they behave like about 7 independent bets.
+- **Deflated Sharpe.** Even counting 4,000 trials, pure luck would give a best Sharpe of about 0.55. The chance that the model has no real edge at all is effectively zero.
+- **Shrinking the edge.** The live model beats the average variant by 0.248. Block-bootstrap sampling noise in that edge is 0.058, against a 0.152 spread across variants. That shrinks the edge to 0.212, so selection costs about 0.04 here: the live model shrinks to about 1.45.
+- **Overfitting test (CSCV, 16 time blocks, 12,870 half/half splits).** Picking the best variant on one half and scoring it on the other, the winner lands below the median only 9% of the time (PBO 0.09; under 0.10 is usually read as low). The in-sample winner drops from 1.57 to 1.37 on average (5-95% range 1.06-1.67) but stays in the top 17% on median. Some of that drop is the two halves being different markets, which moves every variant.
+- **Half swap.** The live model ranks 21st of 802 in 2001-2010 and 34th in 2011-2026. The rank correlation of variants between the halves is 0.62. Choosing the top 10 on one half gives a real but smaller edge on the other: 1.08 vs a 1.03 average in 2011+, and 1.75 vs 1.58 in 2001-2010.
+- **The put/call gate on its own (live model vs the same model without it, round 67).** The gate adds +0.050 Sharpe with the same CAGR (15.6%): +0.049 in 2001-2010 and +0.044 in 2011-2026. But it helps in only 14 of 26 years. Three years carry it: 2014 (+0.59), 2020 (+0.46) and 2025 (+0.48). Without those years the gain is -0.020. A paired block bootstrap puts the gain's 5-95% range at -0.011 to +0.114, with a 9% chance of no gain. It was also picked from about 15 gate variants, so its true value is likely smaller. The gate is a weak, uneven improvement that costs nothing on average (same CAGR and drawdown). The universe change (ranks 151-3,000, 42-day filing rule) carries the rest of the promotion.
+- **What to expect.** The selection adjustments take roughly 0.04-0.20 off the backtest, which leaves a Sharpe of about 1.3-1.45 before anything the backtest cannot see: real fills (especially fractional fills at $15k), data surprises, and the edge fading as markets change. The earlier block bootstrap (5-95% 1.02-1.69) is the better guide to how widely a real decade can land. The live paper account is the only true out-of-sample test.
+
+### 8.26 Wednesday 2026-11-18, 4:35 pm: the put/call gate at real costs (round 75)
+
+Section 8.25 left one gap: the model without the put/call gate had only been run at flat cost. Round 75 ran it under the measured cost-by-rank schedule (1x), with everything else identical to the live model's cost run (round 72). The rule was set beforehand: the gate stays unless the no-gate cell beats 1.437 by at least 0.03.
+
+| | Flat cost | Cost by rank | 2000-2010 (cost) | 2010+ (cost) | CAGR (cost) | Max DD | Volatility |
+|---|---|---|---|---|---|---|---|
+| With gate (live) | 1.479 | **1.437** | 1.880 | 1.159 | 15.1% | -16.9% | 10.1% |
+| Without gate | 1.429 | 1.395 | 1.835 | 1.125 | 15.2% | -16.9% | 10.6% |
+
+The gate's edge holds under costs: +0.042, against +0.050 at flat cost. It is ahead in both halves, with the same CAGR and drawdown and lower volatility. It trades a little more (2.02% vs 1.89% a year in costs), and that is already counted. The gate stays. The sweep is stopped again.
