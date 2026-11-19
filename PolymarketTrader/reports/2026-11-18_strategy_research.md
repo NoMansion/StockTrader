@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 10:58 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 10:53 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics, Politics and Science and Technology at
@@ -616,7 +616,7 @@ next day's opening quote with the taker fee; result is what the basket actually 
   are priced consistently with each other, so the longshot overpricing there is a few tenths of a cent per
   outcome, real per bet and too thin to carry an account.
 
-### 3.16 Round r11: Science and Technology, a third category (10:58 pm CST)
+### 3.16 Round r11: Science and Technology, a third category (10:53 pm CST)
 
 **Data.** Science and Technology is small enough to have been downloaded almost whole: 3,893 of its 3,906 traded
 markets. Random sample 3,850 markets in 637 events; busy sample (5,150+ contracts) 1,559 markets in 417 events.

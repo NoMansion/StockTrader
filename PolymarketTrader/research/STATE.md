@@ -193,7 +193,7 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   bids of an exclusive event's outcomes add up to 1.00-1.02, basket locked at about -0.9% after fees; reached
   1.05 once in five years. No arbitrage. Flags are in `data/kalshi_events.db` (not committed).
 
-- 10:58 pm CST (check-in 13): Science and Technology complete. Round r11 (report 3.16): random 0 pass; busy
+- 10:53 pm CST (check-in 13): Science and Technology complete. Round r11 (report 3.16): random 0 pass; busy
   0 pass / 11 leads (all resting NO). 5-cent rule: taker fails there too (+0.08%); pooled over three categories
   the RESTING version passes both halves (+1.98% per bet, 1,270 events), the TAKER fails both. Fixed a crash on
   a missing title. Download is listing Elections (2,601 series), then Health, World.
