@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 12:58 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 12:54 am CST, 2026-11-19. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics, Politics and Science and Technology at
@@ -717,7 +717,7 @@ fills at no cost. So there is no setting to tune here, which is what a real effe
 does not. (This table's replays differ a little from the one above for the same rule because the two programs
 break same-day ties differently; neither uses the outcome.)
 
-### 3.18 Round r12: Elections, a fourth category (12:58 am CST, November 19)
+### 3.18 Round r12: Elections, a fourth category (12:54 am CST, November 19)
 
 **Data.** Kalshi's archive has Elections only from November 2024. Random sample complete: 2,511 markets in 1,244
 events. Busy sample at the level downloaded so far (23,000+ contracts; still descending to 5,000): 2,247 markets
