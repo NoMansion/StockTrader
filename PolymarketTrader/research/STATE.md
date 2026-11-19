@@ -182,6 +182,13 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   price" idea for the bot is withdrawn. Lesson for judging: always run `analyze_rule.py` (replay) and read
   `oos_evt` before calling anything usable.
 
+- 9:55 pm CST (check-in 12): downloader bug fixed (a ticker with "%" was retried for ever and held the Science
+  and Technology random sample at 811 markets); Science and Technology still downloading (about 2,165 of 3,906
+  with bars). New family 27, `research/event_baskets.py`: NO on every outcome of an event whose YES bids add up
+  to more than 1. On the "no numeric strike" proxy it LOSES (most such events are not exclusive: "by June" and
+  "by December"). Fetching Kalshi's own `mutually_exclusive` flag for the candidate events (table `events`) to
+  test the exclusive ones alone: result goes in the report as 3.15.
+
 ## How to run a round
 
 ```

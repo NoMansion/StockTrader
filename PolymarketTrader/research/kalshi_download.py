@@ -17,6 +17,7 @@ The data stays on this machine (data/ is not committed): Kalshi's terms do not a
     python research/kalshi_download.py --phase candles --min-volume 200 --max-markets 50000
 """
 import argparse
+from urllib.parse import quote
 import sqlite3
 import sys
 import time
@@ -220,15 +221,18 @@ def phase_candles(db, k, categories, min_volume, max_markets, max_days, biggest_
                     status = 3
                 else:
                     start = max(o, cl - max_days * 86400)
-                    path = (f"/historical/markets/{ticker}/candlesticks" if src == "hist"
-                            else f"/series/{series}/markets/{ticker}/candlesticks")
+                    safe = quote(ticker, safe="")       # a few old tickers contain "%" or spaces
+                    path = (f"/historical/markets/{safe}/candlesticks" if src == "hist"
+                            else f"/series/{quote(series or '', safe='')}/markets/{safe}/candlesticks")
                     try:
                         cs = k.get(path, start_ts=start, end_ts=cl + 86400, period_interval=1440).get("candlesticks") or []
                         db.executemany("INSERT OR IGNORE INTO candles VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", candle_rows(ticker, cs))
                         if not cs:
                             status = 2              # no bars: never quoted
                     except KalshiError as e:
-                        status = 4 if e.status_code == 404 else 0
+                        # 400 and 404: the exchange will never answer for this ticker. Leaving it "to do" would
+                        # also hold the random sample at this market for ever (panel.py stops at the first gap).
+                        status = 4 if e.status_code in (400, 404) else 0
                         if status == 0:
                             log(f"candles: {ticker}: {e}")
                     except Exception as e:          # network trouble: leave it for the next run
