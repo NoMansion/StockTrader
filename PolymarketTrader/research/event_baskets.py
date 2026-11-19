@@ -13,7 +13,7 @@ event.
 
 "No numeric strike" is not the same as "exclusive": "by June?" and "by December?" can both be yes. So the result
 is shown three ways: every such event, events Kalshi itself flags as mutually exclusive, and the rest. The flag
-is one request per event (`--fetch-flags`, kept in the `events` table of the history database).
+is one request per event (`--fetch-flags`, kept in data/kalshi_events.db).
 """
 import argparse
 import sys
@@ -55,9 +55,15 @@ def line(b: pd.DataFrame) -> str:
             f"held {b['hold'].median():.0f} days")
 
 
+def flags_db(db_path) -> str:
+    """The flags live in their own file beside the history: the downloader holds the history's write lock for
+    a minute at a time."""
+    return str(Path(db_path).with_name("kalshi_events.db"))
+
+
 def flags(db_path) -> dict[str, bool]:
     import sqlite3
-    db = sqlite3.connect(str(db_path), timeout=60)
+    db = sqlite3.connect(flags_db(db_path), timeout=60)
     db.execute("CREATE TABLE IF NOT EXISTS events (event TEXT PRIMARY KEY, mutually_exclusive INTEGER, title TEXT)")
     out = {e: bool(x) for e, x in db.execute("SELECT event, mutually_exclusive FROM events WHERE mutually_exclusive IS NOT NULL")}
     db.close()
@@ -70,7 +76,7 @@ def fetch_flags(db_path, events: list[str], pace: float = 1.5) -> int:
     from src.kalshi_http import KalshiError, KalshiHTTP
     known = flags(db_path)
     k, n = KalshiHTTP(min_interval=pace), 0
-    db = sqlite3.connect(str(db_path), timeout=60)
+    db = sqlite3.connect(flags_db(db_path), timeout=60)
     for e in events:
         if e in known:
             continue
