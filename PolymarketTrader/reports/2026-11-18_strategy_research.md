@@ -4,7 +4,7 @@ round. Nothing here has been traded, on paper or otherwise.*
 
 ## Status
 
-*Updated 8:12 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
+*Updated 8:07 pm CST, 2026-11-18. Times in new text are US Central; sections 3.1 to 3.5 were written in UTC.*
 
 - **What the data supports: in busy Kalshi markets a cheap YES is overpriced, and the money in that goes to
   whoever rests orders, not to whoever pays the ask.** Across Economics and Politics at 5,000+ contracts traded
@@ -493,7 +493,7 @@ that buys YES passes or leads anywhere.
 **Housekeeping.** The container restarted a second time at about 6:40 pm CST. Data intact; jobs restarted within
 a minute.
 
-### 3.13 Round r10: both categories at 5,000 contracts; the taker version does not survive in Politics (8:12 pm CST)
+### 3.13 Round r10: both categories at 5,000 contracts; the taker version does not survive in Politics (8:07 pm CST)
 
 **Data.** The Politics census is complete down to 5,000 contracts: 5,620 markets in 1,775 events. With
 Economics: 10,909 markets, 3,172 events, 362,482 daily bars, 4,388 markets out of sample. 2,957 rules: 26 pass,
@@ -536,5 +536,10 @@ edge is not concentrated at the close, so hourly bars for the final days are dro
 
 **What this changes in the plan.** The question that decides whether any of this is usable is whether a small
 resting NO order really gets filled at those prices, and how often it is filled only when it is about to lose.
-The backtest cannot answer that. The forward observation log is being extended to track it with real trades.
-
+The backtest cannot answer that. So the forward observation log now tracks it with real trades (8:10 pm CST):
+for each qualifying market it notes the best NO bid and how many contracts were already queued there, then
+reads Kalshi's public trade tape for three days. The hypothetical order counts as filled only if buyers of YES
+traded through that price, or took everything queued ahead of it plus the order itself. First reading, four
+hours after the first 11 observations: 2 filled, both by a trade through the price, which is the bad kind of
+fill (YES was rising). Their outcomes, and the fill rate against the model's 55% to 60%, will take days to
+weeks to mean anything.

@@ -166,12 +166,14 @@ terms do not allow redistributing its data. Commit code, aggregated results and 
   passes. Politics census still descending from 14,452 to 5,000: re-run `--sample liquid --categories Politics`
   when `research/panel.py`-level check shows it complete, then Companies.
 
-- 8:12 pm CST (check-in 10): Politics census complete to 5,000. Round r10 (report 3.13): at 5,150+ contracts in
+- 8:07 pm CST (check-in 10): Politics census complete to 5,000. Round r10 (report 3.13): at 5,150+ contracts in
   both categories, 26 pass / 117 leads, all buy-NO, BUT paying the ask for NO is worth about zero in every band;
   the 5-cent TAKER rule fails in Politics (+0.14% per bet) and is carried by Economics; the RESTING version
   passes pooled (fill is modelled). Closing-window check: nothing special in the last 1-3 days; hourly bars
   dropped. Status section of the report rewritten. Download now on Companies.
-  NEXT BUILD: resting-fill tracking in `scripts/shadow_longshot.py` from Kalshi's public trades.
+  BUILT 8:10 pm: resting-fill tracking in `scripts/shadow_longshot.py` from Kalshi's public trades (queue-aware;
+  3-day window). `--report` prints the fill rate and, once settled, the return of the filled ones: quote it in
+  the report at each check-in once more than about 20 are decided.
 
 ## How to run a round
 

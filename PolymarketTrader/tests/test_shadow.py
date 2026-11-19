@@ -38,9 +38,9 @@ def test_only_markets_that_meet_the_rule_on_a_fresh_book_are_recorded(tmp_path):
     assert row[4] == pytest.approx(0.98) and row[5] * 0.98 + row[6] <= 20.0 and row[6] == pytest.approx(0.03)
     why = dict(db.execute("SELECT ticker, why FROM checked"))
     assert "FAR" not in why and "mid" in why["DRIFT"]
-    # a second run the same day asks for nothing again
+    # a second run the same day looks at no market again; its one request reads the trades behind the resting bid
     before = http.requests
-    assert sl.observe(venue, db, listing, {"economics"}, NOW + 3600, per_event=10)["looked"] == 0 and http.requests == before
+    assert sl.observe(venue, db, listing, {"economics"}, NOW + 3600, per_event=10)["looked"] == 0 and http.requests == before + 1
 
 
 def test_settlement_is_recorded_and_reported(tmp_path):
@@ -57,3 +57,32 @@ def test_settlement_is_recorded_and_reported(tmp_path):
 def test_fee_is_rounded_up_to_the_cent():
     assert sl.order_fee(0.07, 0.98, 20.0) == pytest.approx(0.03)        # 0.07 x 20 x 0.98 x 0.02 = 2.7 cents
     assert sl.order_fee(0.07, 0.50, 100.0) == pytest.approx(1.75)
+
+
+def test_a_resting_bid_fills_only_after_the_queue_ahead_or_on_a_trade_through(tmp_path):
+    http, venue, listing, db = setup(tmp_path)
+    sl.observe(venue, db, listing, {"economics"}, NOW, per_event=10)
+    px, ahead = db.execute("SELECT rest_px, rest_ahead FROM obs WHERE ticker='LONG'").fetchone()
+    assert px == pytest.approx(0.97) and ahead == pytest.approx(400)       # the NO bid at 97c is the YES ask at 3c
+    # buyers of YES take 300 at the ask: not enough to reach an order behind 400
+    http.trade("LONG", NOW + 3600, 0.03, 300)
+    http.trade("LONG", NOW + 3700, 0.02, 5000, taker_side="no")            # sellers of YES do not touch NO bids
+    assert sl.track_resting(venue, db, NOW + 2 * 3600) == 0
+    assert db.execute("SELECT COALESCE(rest_done, 0) FROM obs").fetchone()[0] == 0
+    # another 130: 430 traded at the price, past the 400 ahead plus our 20.6 contracts
+    http.trade("LONG", NOW + 5 * 3600, 0.03, 130)
+    assert sl.track_resting(venue, db, NOW + 6 * 3600) == 1
+    assert db.execute("SELECT rest_filled, rest_fill_ts FROM obs").fetchone() == (1, NOW + 5 * 3600)
+    assert "1 decided, 1 filled" in sl.report(db)
+
+
+def test_a_resting_bid_nobody_reached_is_recorded_as_unfilled_after_three_days(tmp_path):
+    http, venue, listing, db = setup(tmp_path)
+    sl.observe(venue, db, listing, {"economics"}, NOW, per_event=10)
+    http.trade("LONG", NOW + 3600, 0.03, 50)
+    http.trade("LONG", NOW + 80 * 3600, 0.05, 900)                         # a trade through, but after the window
+    assert sl.track_resting(venue, db, NOW + 24 * 3600) == 0               # window still open
+    assert sl.track_resting(venue, db, NOW + 73 * 3600) == 1
+    assert db.execute("SELECT rest_filled, rest_done FROM obs").fetchone() == (0, 1)
+    assert sl.resting_fill([{"taker_side": "yes", "yes_price_dollars": "0.0400", "count_fp": "1", "created_time": "2026-01-01T00:00:00Z"}],
+                           0.03, None) is not None                         # through the price: filled whatever the queue

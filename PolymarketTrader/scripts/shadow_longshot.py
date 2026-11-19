@@ -12,6 +12,11 @@ For every qualifying market it records, once: the quote, the contracts resting a
 it, and what a $20 order would have paid on that book (half of the displayed size assumed real, fee rounded up
 to the cent). Later it records how the market settled. Nothing is ordered and the paper account is not touched:
 the observations live in their own file, data/shadow.db.
+
+It also answers the question the backtest's resting orders depend on (report 3.13): would a small resting NO bid
+really have been filled? At the observation it notes the best NO bid and how many contracts were already queued
+there. Over the next three days it reads the exchange's public trades and counts the order as filled only if
+buyers of YES traded through that price, or took at least everything queued ahead plus the order itself.
 """
 import argparse
 import json
@@ -34,6 +39,21 @@ CREATE TABLE IF NOT EXISTS obs (ticker TEXT PRIMARY KEY, event TEXT, category TE
     stake REAL, fill_px REAL, fill_shares REAL, fee REAL, result TEXT, settled_ts REAL);
 CREATE TABLE IF NOT EXISTS checked (ticker TEXT PRIMARY KEY, ts REAL, why TEXT);
 """
+# added later: the hypothetical resting NO bid and what became of it
+EXTRA = {"rest_px": "REAL", "rest_ahead": "REAL", "maker_rate": "REAL", "rest_filled": "INTEGER", "rest_fill_ts": "REAL",
+         "rest_done": "INTEGER"}
+REST_HOURS = 72.0           # the backtest leaves a resting order for three daily bars
+
+
+def open_db(db):
+    db.executescript(SCHEMA)
+    have = {r[1] for r in db.execute("PRAGMA table_info(obs)")}
+    for col, kind in EXTRA.items():
+        if col not in have:
+            db.execute(f"ALTER TABLE obs ADD COLUMN {col} {kind}")
+    db.execute("UPDATE obs SET rest_px = 1 - yes_ask WHERE rest_px IS NULL")       # rows from before the columns existed
+    db.commit()
+    return db
 RULE = {"max_mid": 0.05, "max_spread": 0.05, "max_days": 30.0, "min_days": 0.25}
 
 
@@ -92,16 +112,66 @@ def look(venue: Kalshi, db, m: dict, now: float, stake: float, min_volume: float
     fills = simulate_buy(no, stake, limit=min(ask + 0.01, 0.99), fee_per_share=lambda p: mk.fee_rate * p * (1 - p))
     shares, px, _ = summarize(fills)
     fee = order_fee(mk.fee_rate, px, shares) if shares else 0.0
-    db.execute("INSERT OR IGNORE INTO obs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL)",
+    rest_px = no.best_bid                           # the price a resting NO order would join: 1 - the YES ask
+    ahead = sum(q for p, q in no.bids if p >= rest_px - 1e-9) if rest_px else None
+    db.execute("INSERT OR IGNORE INTO obs (ticker, event, category, title, seen_ts, end_ts, early, yes_bid, yes_ask, no_ask, "
+               "ask_contracts, ask_usd_1c, volume, stake, fill_px, fill_shares, fee, rest_px, rest_ahead, maker_rate) "
+               "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                (ticker, d.get("event_ticker"), mk.category, mk.question[:200], now, end, 1 if d.get("can_close_early") else 0,
-                yes.best_bid, yes.best_ask, ask, at_ask, near, vol, stake, px if shares else None, shares, fee))
+                yes.best_bid, yes.best_ask, ask, at_ask, near, vol, stake, px if shares else None, shares, fee,
+                rest_px, ahead, getattr(mk, "maker_fee_rate", 0.0)))
     return "recorded"
+
+
+def resting_fill(trades: list[dict], yes_ask: float, need: float | None) -> float | None:
+    """When a resting NO bid at 1 - yes_ask would have been filled, or None. `need` = contracts queued ahead plus
+    the order itself (None when the queue was not recorded: then only a trade THROUGH the price counts)."""
+    at = 0.0
+    for t in sorted(trades, key=lambda t: t.get("created_time") or ""):
+        if t.get("taker_side") != "yes":            # only buyers of YES hit resting NO bids
+            continue
+        try:
+            px, n = float(t["yes_price_dollars"]), float(t["count_fp"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if px > yes_ask + 1e-9:                     # traded through: everything at our price is gone
+            return parse_time(t.get("created_time"))
+        if abs(px - yes_ask) <= 1e-9:
+            at += n
+            if need is not None and at >= need - 1e-9:
+                return parse_time(t.get("created_time"))
+    return None
+
+
+def track_resting(venue: Kalshi, db, now: float, max_checks: int = 30) -> int:
+    """For observations whose three-day window is still open or just closed: read the public trades since the
+    observation and decide whether the resting NO bid would have been filled."""
+    rows = db.execute("SELECT ticker, seen_ts, end_ts, yes_ask, rest_px, rest_ahead, stake FROM obs "
+                      "WHERE COALESCE(rest_done, 0) = 0 ORDER BY seen_ts LIMIT ?", (max_checks,)).fetchall()
+    decided = 0
+    for ticker, seen, end, yes_ask, rest_px, ahead, stake in rows:
+        until = min(seen + REST_HOURS * 3600, end or 9e18)
+        try:
+            trades = list(venue.http.pages("/markets/trades", "trades", max_pages=5, tries=3, ticker=ticker,
+                                           min_ts=int(seen), max_ts=int(min(until, now))))
+        except KalshiError as e:
+            if e.status_code == 429:
+                break
+            continue
+        need = None if ahead is None or not rest_px else ahead + stake / rest_px
+        when = resting_fill(trades, yes_ask, need)
+        if when is not None or now >= until:
+            db.execute("UPDATE obs SET rest_filled=?, rest_fill_ts=?, rest_done=1 WHERE ticker=?",
+                       (1 if when is not None else 0, when, ticker))
+            decided += 1
+    db.commit()
+    return decided
 
 
 def observe(venue: Kalshi, db, listing: dict, categories: set[str], now: float, max_new: int = 25, max_settle: int = 40,
             stake: float = 20.0, min_volume: float = 45000.0, recheck_hours: float = 24.0, per_event: int = 2) -> dict:
-    db.executescript(SCHEMA)
-    out = {"recorded": 0, "looked": 0, "settled": 0}
+    open_db(db)
+    out = {"recorded": 0, "looked": 0, "settled": 0, "resting_decided": 0}
     # 1. how did the finished ones settle?
     due = db.execute("SELECT ticker FROM obs WHERE result IS NULL AND end_ts < ? ORDER BY end_ts LIMIT ?", (now, max_settle)).fetchall()
     for (ticker,) in due:
@@ -135,11 +205,12 @@ def observe(venue: Kalshi, db, listing: dict, categories: set[str], now: float, 
         db.execute("INSERT OR REPLACE INTO checked VALUES (?,?,?)", (m["ticker"], now, what))
         db.commit()
     db.commit()
+    out["resting_decided"] = track_resting(venue, db, now)
     return out
 
 
 def report(db) -> str:
-    db.executescript(SCHEMA)
+    open_db(db)
     rows = db.execute("SELECT no_ask, ask_contracts, ask_usd_1c, fill_px, fill_shares, fee, stake, result, category FROM obs").fetchall()
     if not rows:
         return "no observations yet"
@@ -163,6 +234,18 @@ def report(db) -> str:
                      f"${cost:,.2f} staked returned ${paid:,.2f} ({paid / cost - 1:+.2%} after fees)")
     else:
         lines.append("none of them has settled yet")
+    rest = db.execute("SELECT rest_filled, rest_px, maker_rate, result FROM obs WHERE rest_done = 1").fetchall()
+    if rest:
+        hit = [r for r in rest if r[0]]
+        line = (f"resting NO bid at the best bid, three days: {len(rest)} decided, {len(hit)} filled ({len(hit) / len(rest):.0%}; "
+                f"the backtest's model fills about 55% to 60%)")
+        done = [r for r in hit if r[3] in ("yes", "no")]
+        if done:
+            cost = sum(r[1] + (r[2] or 0) * r[1] * (1 - r[1]) for r in done)
+            line += f"; of the filled, {len(done)} settled, {sum(1 for r in done if r[3] == 'yes')} lost, {sum(1 for r in done if r[3] == 'no') / cost - 1:+.2%} per dollar"
+        lines.append(line)
+    else:
+        lines.append("resting NO bids: none past its three-day window yet")
     return "\n".join(lines)
 
 
@@ -190,7 +273,7 @@ def main() -> int:
     venue._load_series(sorted(proper.get(c, c.title()) for c in cats))
     res = observe(venue, db, listing, cats, time.time(), max_new=args.max_new, min_volume=args.min_volume)
     print(time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()), f"shadow longshot: looked at {res['looked']}, recorded {res['recorded']}, "
-          f"settled {res['settled']}; {venue.requests} requests")
+          f"settled {res['settled']}, resting orders decided {res['resting_decided']}; {venue.requests} requests")
     print(report(db))
     return 0
 
