@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>StockTrader daily report</title><style>
+:root{color-scheme:light;--bg:#f7f7f5;--surface:#fcfcfb;--line:#e4e3de;--ink:#0b0b0b;--ink2:#52514e;--muted:#7a796f;
+--acct:#2a78d6;--spy:#eb6834;--pos:#2a78d6;--neg:#d03b3b;--stock:#6250d6;--ief:#1baf7a;--gld:#eda100;--cash:#a3a29a}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme=light])){color-scheme:dark;--bg:#121211;--surface:#1a1a19;
+--line:#383835;--ink:#f0efec;--ink2:#c3c2b7;--muted:#8a897f;--acct:#3987e5;--spy:#d95926;--pos:#3987e5;--neg:#e66767;
+--stock:#9085e9;--ief:#199e70;--gld:#c98500;--cash:#6b6a64}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 64px}h1{font-size:24px;margin:0}h2{font-size:17px;margin:0 0 12px}
+.sub{color:var(--ink2);margin:2px 0 20px}.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;margin:0 0 16px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:10px;padding:10px 12px}.tile .k{color:var(--ink2);font-size:13px}
+.tile .v{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums}.tile .n{color:var(--muted);font-size:12px}
+.mark{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+.legend{display:flex;gap:18px;color:var(--ink2);font-size:13px;margin:0 0 6px;flex-wrap:wrap}
+#chart{position:relative}#chart svg{display:block;width:100%;height:auto}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.18);display:none;white-space:nowrap;font-variant-numeric:tabular-nums}
+.split{display:flex;gap:2px;height:30px;border-radius:6px;overflow:hidden;margin:4px 0 8px}.split div{min-width:2px}
+.keys{display:flex;flex-wrap:wrap;gap:6px 18px;color:var(--ink2);font-size:14px}
+.row{display:grid;grid-template-columns:minmax(105px,170px) 1fr 52px;gap:10px;align-items:center;font-size:14px;margin:5px 0}
+.row .bar{height:12px;border-radius:0 4px 4px 0;background:var(--stock)}.row .num{text-align:right;font-variant-numeric:tabular-nums}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+.list h3{font-size:14px;margin:0 0 6px;color:var(--ink2);font-weight:600}.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:13px;font-variant-numeric:tabular-nums}
+.chip small{color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th{color:var(--ink2);font-weight:600;text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none;white-space:nowrap}
+th:first-child,td:first-child,th.l,td.l{text-align:left}td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}
+tr.sleeve td:first-child{font-weight:650}.scroll{overflow-x:auto}.note{color:var(--muted);font-size:13px;margin:8px 0 0}
+.mini{display:inline-block;height:8px;border-radius:2px;vertical-align:middle;margin-left:6px}
+p.about{color:var(--ink2);margin:0 0 8px}
+</style></head>
+<body><main>
+<h1>StockTrader daily report</h1>
+<p class="sub">Friday, November 20, 2026 · Paper account · updated Nov 20, 6:20 PM CT · percentages only, no dollar amounts</p>
+
+<section class="card"><h2>Returns</h2><div class="tiles" id="tiles"></div>
+<p class="note">Change in account value. "Since" means the account is younger than that period.</p></section>
+
+<section class="card"><h2>Account vs the S&amp;P 500 since the start</h2>
+<div class="legend"><span><span class="mark" style="background:var(--acct)"></span>Account</span>
+<span><span class="mark" style="background:var(--spy)"></span>SPY (S&amp;P 500 ETF, dividends reinvested)</span></div>
+<div id="chart"></div></section>
+
+<section class="card"><h2>Where the money is</h2><div class="split" id="split"></div><div class="keys" id="splitkeys"></div>
+<h2 style="margin-top:20px">Stocks by sector <span class="note">(% of the whole account)</span></h2><div id="sectors"></div></section>
+
+<section class="card"><h2>Today's trades</h2><p class="note" style="margin:-6px 0 12px">Filled at today's open; size as % of the account.</p>
+<div class="cols" id="trades"></div><p class="note" id="queued"></p></section>
+
+<section class="card"><h2>Holdings (47)</h2><div class="scroll"><table id="hold"><thead><tr>
+<th data-k="s">Symbol</th><th data-k="sector" class="l">Sector</th><th data-k="w">Weight</th><th data-k="day">Today</th><th data-k="total">Since bought</th>
+</tr></thead><tbody></tbody></table></div><p class="note" id="dust"></p><p class="note">Click a column header to sort.</p></section>
+
+<section class="card"><h2>Day by day</h2><div class="scroll"><table id="log"><thead><tr>
+<th>Date</th><th>Account</th><th>SPY</th><th>Since start</th><th>Names bought</th><th>Names sold</th>
+</tr></thead><tbody></tbody></table></div></section>
+
+<section class="card"><h2>Dividends</h2><div id="divs"></div></section>
+
+<section class="card"><h2>How the model works</h2>
+<p class="about">Each evening it takes the US stocks ranked 151st to 3,000th by dollar trading volume, scores them on a mix of earnings surprise, free-cash-flow yield and six quality/value measures, skips financially weak companies (Altman Z below 1.81), buys a new name only within 42 trading days of its last earnings filing, and holds the top 45: at most 11 from one sector, sized by the square root of company size.</p>
+<p class="about">How much goes into stocks is set by market conditions: a 15% volatility target (10-day), halved when the market's 12-month return is negative, halved when more NYSE stocks hit new lows than new highs over 5 days, halved when the NYSE advance/decline line is below its 100-day average, and halved when the equity put/call ratio is in the lowest 5% of its past year (complacency). The rest goes into IEF (7-10 year Treasuries) and GLD (gold).</p>
+<p class="note">Orders are placed after the close and fill at the next day's open. This is a research project, not investment advice.</p></section>
+</main>
+<script type="application/json" id="data">{"date":"2026-11-20","date_long":"Friday, November 20, 2026","paper":true,"updated":"Nov 20, 6:20 PM CT","returns":[{"label":"Day","pct":-0.002154596602955694,"since":null},{"label":"Week","pct":-0.024428892331888608,"since":null},{"label":"Month","pct":-0.04202799999999962,"since":"Nov 5, 2026"},{"label":"Year","pct":-0.04202799999999962,"since":"Nov 5, 2026"},{"label":"YTD","pct":-0.04202799999999962,"since":"Nov 5, 2026"},{"label":"All time","pct":-0.04202799999999962,"since":null}],"chart":[{"d":"2026-11-05","acct":0.0,"spy":0.0},{"d":"2026-11-06","acct":0.0,"spy":0.003124147339699901},{"d":"2026-11-09","acct":0.0024332000000000242,"spy":0.02686221009549805},{"d":"2026-11-10","acct":0.000555499999999931,"spy":0.02308321964529325},{"d":"2026-11-11","acct":-0.002332599999999907,"spy":0.036575716234652056},{"d":"2026-11-12","acct":-0.019054600000000033,"spy":0.03290586630286496},{"d":"2026-11-13","acct":-0.018039799999999828,"spy":0.029154160982264754},{"d":"2026-11-16","acct":-0.025701299999999927,"spy":0.009481582537517186},{"d":"2026-11-17","acct":-0.028967899999999824,"spy":-0.0007639836289221602},{"d":"2026-11-18","acct":-0.036417699999999775,"spy":-0.003819918144611134},{"d":"2026-11-19","acct":-0.039959499999999704,"spy":-0.023369713506139145},{"d":"2026-11-20","acct":-0.04202799999999962,"spy":-0.05892223738062763}],"split":{"Stocks":0.13636624246846463,"IEF":0.677087360256876,"GLD":0.166825881434948,"Cash":0.0197205137519677},"sectors":[["Energy",0.052990234871165325],["Financials",0.030815375334560927],["Consumer Discretionary",0.015256140878856586],["Industrials",0.013920343183308072],["Information Technology",0.00844662314764941],["Health Care",0.008076026470502269],["Materials",0.0036485273264771833],["Consumer Staples",0.0026513682028284752],["Communication Services",0.0005616030531163749]],"holdings":[{"s":"IEF","sector":"Bonds (IEF)","w":0.677087360256876,"day":0.00694,"total":0.00818},{"s":"GLD","sector":"Gold (GLD)","w":0.166825881434948,"day":-0.0327,"total":-0.10622},{"s":"BP","sector":"Energy","w":0.011798629103982163,"day":-0.01065,"total":-0.05669},{"s":"SU","sector":"Energy","w":0.010122064705440243,"day":-0.00219,"total":-0.05562},{"s":"IMO","sector":"Energy","w":0.007879756318556284,"day":-0.00214,"total":-0.07598},{"s":"HIG","sector":"Financials","w":0.007182965243243018,"day":0.00929,"total":-0.00158},{"s":"CVE","sector":"Energy","w":0.006979854880935978,"day":-0.00331,"total":-0.03205},{"s":"THC","sector":"Health Care","w":0.00539894629488127,"day":-0.00152,"total":-0.07459},{"s":"GIB","sector":"Information Technology","w":0.004382906285361159,"day":0.01316,"total":-0.01897},{"s":"EQH","sector":"Financials","w":0.004268349763876189,"day":-0.02932,"total":-0.08488},{"s":"RGA","sector":"Financials","w":0.004066581257072232,"day":-0.00466,"total":-0.03561},{"s":"DECK","sector":"Consumer Discretionary","w":0.003785973754974049,"day":-0.01279,"total":-0.07758},{"s":"STN","sector":"Industrials","w":0.003622737428651359,"day":0.01058,"total":0.00702},{"s":"AM","sector":"Energy","w":0.0035762730956645913,"day":-0.01792,"total":-0.02129},{"s":"VIRT","sector":"Financials","w":0.0034048264041120204,"day":-0.04765,"total":-0.04945},{"s":"GAP","sector":"Consumer Discretionary","w":0.0033167497484268855,"day":0.12103,"total":-0.02132},{"s":"PBF","sector":"Energy","w":0.0032354950666616564,"day":-0.00195,"total":-0.09214},{"s":"BZ","sector":"Industrials","w":0.002888084046297804,"day":-0.01866,"total":-0.07662},{"s":"BGC","sector":"Financials","w":0.002662583029566626,"day":-0.01616,"total":-0.02175},{"s":"DAR","sector":"Consumer Staples","w":0.0026513682028284752,"day":-0.01788,"total":-0.03148},{"s":"INSW","sector":"Energy","w":0.002631433142096011,"day":-0.00328,"total":-0.01844},{"s":"ST","sector":"Industrials","w":0.0026314205321241123,"day":-0.04273,"total":-0.0605},{"s":"RDN","sector":"Financials","w":0.0025641580025303457,"day":0.01042,"total":-0.01261},{"s":"DOX","sector":"Information Technology","w":0.0024794612681790285,"day":0.01679,"total":-0.03583},{"s":"ENVA","sector":"Financials","w":0.002353945355396609,"day":-0.01545,"total":-0.02199},{"s":"MAT","sector":"Consumer Discretionary","w":0.002286682282989482,"day":-0.04514,"total":-0.05513},{"s":"MEOH","sector":"Materials","w":0.002061310570663861,"day":-0.03297,"total":-0.09843},{"s":"SBLK","sector":"Industrials","w":0.0020471340707244054,"day":0.00389,"total":-0.01477},{"s":"TNK","sector":"Energy","w":0.002029955990362975,"day":-0.01031,"total":-0.00219},{"s":"HGV","sector":"Consumer Discretionary","w":0.0019754617775884892,"day":-0.02195,"total":-0.04495},{"s":"CXW","sector":"Industrials","w":0.001866860033487409,"day":-0.03731,"total":-0.06145},{"s":"DK","sector":"Energy","w":0.001816818341245882,"day":-0.00747,"total":-0.08828},{"s":"LPG","sector":"Energy","w":0.0016371805438989866,"day":-0.01734,"total":-0.02959},{"s":"CENX","sector":"Materials","w":0.0015872167558133223,"day":-0.05552,"total":-0.17716},{"s":"KARO","sector":"Information Technology","w":0.0015842555941092224,"day":-0.02027,"total":-0.02344},{"s":"PRDO","sector":"Consumer Discretionary","w":0.0015202914177032314,"day":-0.02899,"total":-0.05145},{"s":"DFIN","sector":"Financials","w":0.0014718077146304903,"day":-0.01345,"total":-0.03514},{"s":"NRIX","sector":"Health Care","w":0.0013760939463783911,"day":-0.06618,"total":-0.09844},{"s":"AMPH","sector":"Health Care","w":0.0013009862292426083,"day":0.00535,"total":-0.03259},{"s":"NVGS","sector":"Energy","w":0.0012827736823205688,"day":-0.01615,"total":-0.04865},{"s":"ATLC","sector":"Financials","w":0.0012724159787551202,"day":-0.02681,"total":-0.05074},{"s":"ACEL","sector":"Consumer Discretionary","w":0.0012190811422463288,"day":0.00227,"total":-0.04267},{"s":"SMP","sector":"Consumer Discretionary","w":0.001151900754928119,"day":-0.02801,"total":-0.02294},{"s":"WRLD","sector":"Financials","w":0.0009152261548354231,"day":-0.01564,"total":-0.02399},{"s":"PANL","sector":"Industrials","w":0.0008641070720229819,"day":-0.00122,"total":-0.02383},{"s":"KINS","sector":"Financials","w":0.0006525164305428552,"day":-0.00889,"total":-0.00826},{"s":"SPOK","sector":"Communication Services","w":0.0005616030531163749,"day":0.01033,"total":0.00373}],"dust":{"n":4,"w":0.0029934527105176354},"trades":{"new":[{"s":"SBLK","w":0.0020778269092160315},{"s":"KINS","w":0.0006579524244304636},{"s":"SPOK","w":0.0005595153094244927}],"added":[{"s":"GLD","w":0.003408763510624841},{"s":"SU","w":0.002300797935199985},{"s":"HIG","w":0.0014819848583551504},{"s":"THC","w":0.0011531652262604752},{"s":"VIRT","w":0.001149929224952817},{"s":"AM","w":0.001088132012080207},{"s":"STN","w":0.001057964115535736},{"s":"EQH","w":0.0008951201075678621},{"s":"DECK","w":0.0008869779072979169},{"s":"BGC","w":0.0008233017248403919},{"s":"GAP","w":0.0007535710854414325},{"s":"MAT","w":0.0007466815312717908},{"s":"INSW","w":0.0007270567404631869},{"s":"PBF","w":0.0006554471318070883},{"s":"BZ","w":0.000634360920645593},{"s":"TNK","w":0.0006229827170696012},{"s":"DOX","w":0.0005645258940685115},{"s":"CXW","w":0.0005605591812441282},{"s":"ST","w":0.0005468844600510245},{"s":"RDN","w":0.0005209964379931773},{"s":"NRIX","w":0.000511184042886431},{"s":"KARO","w":0.0005073217170491413},{"s":"LPG","w":0.0005027286807102922},{"s":"ENVA","w":0.00048696621601925736},{"s":"PRDO","w":0.000484460923591295},{"s":"ACEL","w":0.00042339442071375784},{"s":"NVGS","w":0.0004031433068638749},{"s":"AMPH","w":0.0003977151732374225},{"s":"DFIN","w":0.0003817439336092287},{"s":"SMP","w":0.0003579436559557064},{"s":"ATLC","w":0.00033581357219960505},{"s":"PANL","w":0.0002815322368357321},{"s":"WRLD","w":0.00019603913258560795}],"trimmed":[{"s":"IEF","w":0.021134438167030145}],"exited":[{"s":"KNX","w":0.0029886412709097974},{"s":"AYI","w":0.0028899838603487367},{"s":"FCFS","w":0.002139602436946174}]},"queued":{"buys":0,"sells":0,"buy_w":0.0,"sell_w":0.0,"new":[],"exit":[]},"history":[{"d":"2026-11-06","day":0.0,"cum":0.0,"spy":0.003124147339699901,"buys":0,"sells":0},{"d":"2026-11-09","day":0.0024332000000000242,"cum":0.0024332000000000242,"spy":0.023664132519142234,"buys":55,"sells":0},{"d":"2026-11-10","day":-0.0018731422702281675,"cum":0.000555499999999931,"spy":-0.0036801339196749216,"buys":32,"sells":38},{"d":"2026-11-11","day":-0.002886496551165796,"cum":-0.002332599999999907,"spy":0.013188073394495348,"buys":40,"sells":59},{"d":"2026-11-12","day":-0.016761096934710062,"cum":-0.019054600000000033,"spy":-0.0035403587739039066,"buys":20,"sells":28},{"d":"2026-11-13","day":0.001034512216480321,"cum":-0.018039799999999828,"spy":-0.0036321851225696866,"buys":21,"sells":30},{"d":"2026-11-16","day":-0.007802251048464215,"cum":-0.025701299999999927,"spy":-0.01911528825377462,"buys":13,"sells":8},{"d":"2026-11-17","day":-0.0033527705620461923,"cum":-0.028967899999999824,"spy":-0.010149334414487399,"buys":38,"sells":32},{"d":"2026-11-18","day":-0.007672042973656534,"cum":-0.036417699999999775,"spy":-0.0030582709846540546,"buys":32,"sells":6},{"d":"2026-11-19","day":-0.003675659048531621,"cum":-0.039959499999999704,"spy":-0.019624760339633007,"buys":23,"sells":55},{"d":"2026-11-20","day":-0.002154596602955694,"cum":-0.04202799999999962,"spy":-0.03640325757469942,"buys":36,"sells":4}],"div_mode":"actual","div_total_w":2.5888021779342195e-05,"divs":[{"s":"WELL","ex":"2026-11-19","w":2.5888021779342195e-05}]}</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const pct = (x, s=true) => x == null ? '—' : (s && x >= 0 ? '+' : '') + (x*100).toFixed(2) + '%';
+const w1 = x => (x > 0 && x < 0.0005) ? '<0.1%' : (x*100).toFixed(1) + '%';
+const wt = x => (x*100).toFixed(4).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '.0') + '%';   // table: up to 4 decimals
+const ax1 = v => (Math.abs(v) < 1e-9 ? '' : v > 0 ? '+' : '') + (v*100).toFixed(1) + '%';
+const bp = x => '+' + (x*100).toFixed(3) + '%';
+const el = (t, a={}, ...k) => { const e = document.createElement(t); for (const [n,v] of Object.entries(a)) n==='style'?e.style.cssText=v:e.setAttribute(n,v); k.flat().forEach(c => e.append(c)); return e; };
+
+// returns tiles
+const tiles = document.getElementById('tiles');
+D.returns.forEach(r => tiles.append(el('div',{class:'tile'}, el('div',{class:'k'},r.label), el('div',{class:'v'},pct(r.pct)),
+  el('div',{class:'n'}, r.since ? 'since ' + r.since : ' '))));
+
+// account vs SPY chart (hover: crosshair + values)
+(function(){
+  const pts = D.chart; if (pts.length < 2) { document.getElementById('chart').textContent = 'Not enough history yet.'; return; }
+  const box0 = document.getElementById('chart'), W = Math.max(300, Math.min(900, box0.clientWidth || 900)),
+        H = W < 600 ? 230 : 300, L = 52, R = 12, T = 12, B = 30;
+  const ys = pts.flatMap(p => [p.acct, p.spy]).filter(v => v != null);
+  let lo = Math.min(0, ...ys), hi = Math.max(0, ...ys); const pad = (hi - lo) * 0.08 || 0.01; lo -= pad; hi += pad;
+  const x = i => L + (W - L - R) * i / (pts.length - 1), y = v => T + (H - T - B) * (hi - v) / (hi - lo);
+  const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const add = (t, a) => { const e = document.createElementNS(ns, t); for (const k in a) e.setAttribute(k, a[k]); svg.append(e); return e; };
+  const step = niceStep((hi - lo) / 5);
+  for (let v = Math.ceil(lo/step)*step; v <= hi; v += step) {
+    add('line', {x1:L, x2:W-R, y1:y(v), y2:y(v), stroke: Math.abs(v)<1e-9 ? 'var(--muted)' : 'var(--line)', 'stroke-width':1});
+    add('text', {x:L-8, y:y(v)+4, 'text-anchor':'end', 'font-size':12, fill:'var(--muted)'}).textContent = ax1(v);
+  }
+  const nl = Math.min(W < 600 ? 4 : 6, pts.length);
+  for (let j = 0; j < nl; j++) { const i = Math.round(j * (pts.length-1) / Math.max(nl-1,1));
+    add('text', {x:x(i), y:H-8, 'text-anchor': j===0?'start':j===nl-1?'end':'middle', 'font-size':12, fill:'var(--muted)'}).textContent =
+      new Date(pts[i].d + 'T12:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}); }
+  const line = (k, c) => { const d = pts.map((p,i) => p[k]==null?null:[x(i),y(p[k])]).filter(Boolean);
+    if (d.length > 1) add('path', {d:'M'+d.map(q=>q.join(',')).join('L'), fill:'none', stroke:c, 'stroke-width':2, 'stroke-linejoin':'round'}); };
+  line('spy', 'var(--spy)'); line('acct', 'var(--acct)');
+  const cross = add('line', {y1:T, y2:H-B, stroke:'var(--muted)', 'stroke-width':1, visibility:'hidden'});
+  const dA = add('circle', {r:5, fill:'var(--acct)', stroke:'var(--surface)', 'stroke-width':2, visibility:'hidden'});
+  const dS = add('circle', {r:5, fill:'var(--spy)', stroke:'var(--surface)', 'stroke-width':2, visibility:'hidden'});
+  const box = document.getElementById('chart'); box.append(svg); const tip = el('div', {class:'tip'}); box.append(tip);
+  const hit = add('rect', {x:L, y:T, width:W-L-R, height:H-T-B, fill:'transparent'});
+  hit.addEventListener('pointermove', ev => {
+    const r = svg.getBoundingClientRect(), sx = (ev.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(pts.length-1, Math.round((sx - L) / (W-L-R) * (pts.length-1)))), p = pts[i];
+    [cross, dA, dS].forEach(e => e.setAttribute('visibility','visible'));
+    cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i));
+    dA.setAttribute('cx', x(i)); dA.setAttribute('cy', y(p.acct));
+    if (p.spy != null) { dS.setAttribute('cx', x(i)); dS.setAttribute('cy', y(p.spy)); } else dS.setAttribute('visibility','hidden');
+    tip.innerHTML = `<b>${new Date(p.d+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</b><br>` +
+      `<span class="mark" style="background:var(--acct)"></span>Account ${pct(p.acct)}<br>` +
+      `<span class="mark" style="background:var(--spy)"></span>SPY ${pct(p.spy)}`;
+    tip.style.display = 'block'; const px = x(i) * r.width / W;
+    tip.style.left = Math.min(px + 12, r.width - tip.offsetWidth - 4) + 'px'; tip.style.top = '8px';
+  });
+  hit.addEventListener('pointerleave', () => { [cross, dA, dS].forEach(e => e.setAttribute('visibility','hidden')); tip.style.display='none'; });
+  function niceStep(r){ const m = Math.pow(10, Math.floor(Math.log10(r))); for (const k of [1,2,2.5,5,10]) if (k*m >= r) return k*m; return 10*m; }
+})();
+
+// where the money is
+(function(){
+  const c = {Stocks:'var(--stock)', IEF:'var(--ief)', GLD:'var(--gld)', Cash:'var(--cash)'};
+  const bar = document.getElementById('split'), keys = document.getElementById('splitkeys');
+  Object.entries(D.split).forEach(([k,v]) => { if (v <= 0) return; bar.append(el('div',{style:`flex:${v};background:${c[k]}`, title:`${k} ${w1(v)}`}));
+    keys.append(el('span',{}, el('span',{class:'mark',style:`background:${c[k]}`}), `${k} ${w1(v)}`)); });
+  const sec = document.getElementById('sectors'), mx = Math.max(...D.sectors.map(s => s[1]), 1e-9);
+  D.sectors.forEach(([n,v]) => sec.append(el('div',{class:'row'}, el('span',{},n), el('div',{class:'bar',style:`width:${v/mx*100}%`}), el('span',{class:'num'},w1(v)))));
+})();
+
+// trades
+(function(){
+  const box = document.getElementById('trades'), names = {new:'New buys', added:'Added to', trimmed:'Trimmed', exited:'Sold out'};
+  let any = false;
+  for (const k of ['new','added','trimmed','exited']) { const t = D.trades[k]; if (!t.length) continue; any = true;
+    box.append(el('div',{class:'list'}, el('h3',{}, `${names[k]} (${t.length})`),
+      el('div',{class:'chips'}, t.map(x => el('span',{class:'chip'}, x.s + ' ', el('small',{}, w1(x.w))))))); }
+  if (!any) box.append(el('p',{class:'note'},'No trades today.'));
+  const q = D.queued, qb = document.getElementById('queued');
+  if (!q) qb.textContent = 'Orders for the next open are listed after the evening run.';
+  else if (q.buys + q.sells === 0) qb.textContent = 'No orders queued for the next open.';
+  else qb.textContent = `Queued for the next open: ${q.buys} buys (${w1(q.buy_w)} of the account), ${q.sells} sells (${w1(q.sell_w)})` +
+    (q.new.length ? `. New: ${q.new.join(', ')}` : '') + (q.exit.length ? `. Selling out: ${q.exit.join(', ')}` : '') + '.';
+})();
+
+// holdings (click a header to sort)
+(function(){
+  const rows = D.holdings.slice(), tb = document.querySelector('#hold tbody'), mx = Math.max(...rows.map(r => Math.abs(r.total)), 0.01);
+  const draw = () => { tb.innerHTML = ''; rows.forEach(r => tb.append(el('tr',{class: ['IEF','GLD','TLT','SHY'].includes(r.s) ? 'sleeve' : ''},
+    el('td',{},r.s), el('td',{class:'l'},r.sector), el('td',{},wt(r.w)), el('td',{},pct(r.day)),
+    el('td',{}, pct(r.total), el('span',{class:'mini',style:`width:${Math.max(2,Math.abs(r.total)/mx*40)}px;background:${r.total>=0?'var(--pos)':'var(--neg)'}`}))))); };
+  let key = 'w', dir = -1;
+  document.querySelectorAll('#hold th').forEach(th => th.addEventListener('click', () => { const k = th.dataset.k;
+    dir = (k === key) ? -dir : (k === 's' || k === 'sector' ? 1 : -1); key = k;
+    rows.sort((a,b) => (a[k] > b[k] ? 1 : a[k] < b[k] ? -1 : 0) * dir); draw(); }));
+  draw();
+  if (D.dust.n) document.getElementById('dust').textContent = `${D.dust.n} of these positions are under 0.1% of the account (${w1(D.dust.w)} in total): leftover fractional shares from sells.`;
+})();
+
+// day-by-day log (newest first)
+(function(){
+  const tb = document.querySelector('#log tbody');
+  D.history.slice().reverse().forEach(h => tb.append(el('tr',{}, el('td',{}, new Date(h.d+'T12:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})),
+    el('td',{},pct(h.day)), el('td',{},pct(h.spy)), el('td',{},pct(h.cum)), el('td',{},String(h.buys)), el('td',{},String(h.sells)))));
+})();
+
+// dividends
+(function(){
+  const box = document.getElementById('divs');
+  const head = D.div_mode === 'estimated'
+    ? `Estimated dividends add ${pct(D.div_total_w)} to the returns above. The paper account is not paid dividends, so each one is estimated from the shares held the night before its ex-date.`
+    : `Dividends received add ${pct(D.div_total_w)} (already in the account value).`;
+  box.append(el('p',{class:'note',style:'margin-top:0'}, head));
+  if (D.divs.length) box.append(el('div',{class:'chips'}, D.divs.slice().reverse().map(d => el('span',{class:'chip'}, d.s + ' ',
+    el('small',{}, new Date(d.ex+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' · ' + bp(d.w))))));
+})();
+</script>
+</body></html>
