@@ -281,8 +281,10 @@ def main():
     if p.get("exposure"):
         # market-regime scaling: shrink the invested budget when the universe index says so
         e = float(exposure_series(p["exposure"], close, gate_membership).iloc[-1])
+        gc.collect()
         rules = scale_rules(rules, e)
         print(f"Exposure '{p['exposure']}': {e:.2f} -> invested budget {1 - rules.cash_buffer:.0%}")
+    del gate_membership          # only the exposure gate reads the full-universe membership
 
     fund = fundamentals_from_config(cfg, close, refresh=True)
     feats = live_features(cfg, rules, close, volume, raw_close, fund)
@@ -295,6 +297,8 @@ def main():
         fr = fresh_mask(fund["sue"], close.iloc[-300:], int(p["fresh_entry_days"])).loc[today]
         rules = replace(rules, fresh=fr)
         print(f"Fresh entry (<= {p['fresh_entry_days']} trading days since the last filing): {int(fr.sum())} names may be bought today")
+    del fund                     # the fundamentals panels (~1-2 GB) are not read after the features and the fresh mask
+    gc.collect()
     if rules.sizing in ("mcap", "sqrt_mcap"):
         from src.fundamentals import mcap_true
         from src.providers_sharadar import filing_marketcaps
@@ -304,10 +308,16 @@ def main():
         rules = replace(rules, mcap=mc)
         print(f"Market cap ({rules.sizing} sizing): {int(mc.notna().sum())}/{close.shape[1]} names have one today")
     screen = m.get("screen")
-    labels = forward_excess_return(close, bt.horizon_days)
+    # forward labels (a full-history frame) only when something trains on them or measures a trailing IC
+    _labels = []
+    def labels_():
+        if not _labels:
+            _labels.append(forward_excess_return(close, bt.horizon_days))
+        return _labels[0]
     vol = realized_vol(close, p["vol_lookback_days"]).loc[today]
     adv_today = dollar_adv(raw_close, volume, 60).loc[today]
-    daily_vol = close.pct_change().iloc[-20:].std()
+    # element-wise returns: the last 21 closes give exactly the last 20 returns of the full frame
+    daily_vol = close.iloc[-21:].pct_change().iloc[-20:].std()
     members_today = membership.iloc[-1] if membership is not None else None
 
     books = build_books(cfg)
@@ -336,7 +346,7 @@ def main():
         ranker = make_ranker(b.ranker, b.ranker_weights) if b.ranker_weights else make_ranker(b.ranker)
         if ranker.needs_training:
             end = close.index[-1 - bt.horizon_days]
-            ranker.fit(feats.loc[close.index[-bt.train_window_days]:end], labels, end_date=end)
+            ranker.fit(feats.loc[close.index[-bt.train_window_days]:end], labels_(), end_date=end)
         scores = ranker.score(feats.xs(today, level="date"))
         if screen:
             n0 = len(scores)
@@ -361,7 +371,7 @@ def main():
         ret_win, ic = None, float("nan")
         if b_rules.sizing == "optimizer":
             ret_win = close.pct_change().iloc[-b_rules.optimizer.cov_lookback:]
-            ic = trailing_ic(ranker, feats, labels, close.index, bt.horizon_days)
+            ic = trailing_ic(ranker, feats, labels_(), close.index, bt.horizon_days)
             print(f"Trailing IC: {ic:.3f}" if ic == ic else "Trailing IC: n/a (using ic_default)")
         w_b, trades, new_state = rebalance(scores, vol, b_rules, state, today, returns_window=ret_win, ic=ic,
                                            adv=adv_today, cost_model=cost_model)
@@ -435,7 +445,7 @@ def main():
     targets, skip = sres.targets, set(skip) | sres.skip
 
     if not args.dry_run and order_type == "opg":
-        del close, volume, raw_close, feats, labels, membership, gate_membership
+        del close, volume, raw_close, feats, membership, _labels
         gc.collect()
         wait_for_opg_window()
     try:   # for the live-vs-model snapshot (src/tracking.py); a failure here must not stop the orders

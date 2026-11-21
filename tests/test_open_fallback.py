@@ -1,6 +1,16 @@
 import json
+from datetime import date
 
-from src.open_fallback import last_batch, plan_resends
+from src.open_fallback import batch_is_for_today, last_batch, plan_resends
+
+
+def test_batch_for_todays_open_includes_weekend_and_holiday_runs():
+    fri, sat, mon = date(2026, 11, 20), date(2026, 11, 21), date(2026, 11, 23)
+    assert batch_is_for_today(fri, fri, mon)                 # normal Friday-evening run
+    assert batch_is_for_today(sat, fri, mon)                 # missed Friday batch sent on Saturday
+    assert batch_is_for_today(mon, fri, mon)                 # sent Monday before the open
+    assert not batch_is_for_today(date(2026, 11, 19), fri, mon)   # Thursday's batch was for Friday's open
+    assert not batch_is_for_today(sat, None, mon)
 
 
 def o(t, side, tif, qty, oid):

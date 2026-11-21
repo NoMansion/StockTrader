@@ -139,7 +139,7 @@ def dividends(api: Alpaca, symbols: list[str], start: date, end: date) -> list[d
 
 def daily_job_running() -> bool:
     cmd = ["powershell", "-NoProfile", "-Command",
-           "(Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'run_daily\\.py' }).Count"]
+           "(Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | Where-Object { $_.CommandLine -match 'run_daily(_retry)?\\.py' }).Count"]
     try:
         return int((subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout or "0").strip() or 0) > 0
     except (subprocess.SubprocessError, ValueError, OSError):

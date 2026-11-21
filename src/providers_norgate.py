@@ -17,6 +17,7 @@ the norgatedata docs. Run `python scripts/norgate_smoke.py` on your PC first.
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 from .data import COLS
@@ -95,7 +96,58 @@ def major_exchange_membership(symbols: list[str], start: str) -> pd.DataFrame:
 
 
 def fetch_bars(symbols: list[str], start: str, end: str | None = None) -> pd.DataFrame:
-    """Long table in the project's standard shape, plus `assetid`."""
+    """Long table in the project's standard shape, plus `assetid`.
+
+    Built column by column from per-symbol arrays (2026-11-21): the old per-symbol DataFrames + pd.concat held two
+    full copies of the table at once (~2.2 GB each for the live job's ~12k tickers). Same frame, about half the peak."""
+    nd = _nd()
+    parts = {c: [] for c in ("date", "open", "high", "low", "close", "volume", "adj_close")}
+    names, counts, ids = [], [], []
+    for s in symbols:
+        try:
+            adj = nd.price_timeseries(
+                s, stock_price_adjustment_setting=nd.StockPriceAdjustmentType.TOTALRETURN,
+                padding_setting=nd.PaddingType.NONE, start_date=start, end_date=end,
+                timeseriesformat="pandas-dataframe",
+            )
+            raw = nd.price_timeseries(
+                s, stock_price_adjustment_setting=nd.StockPriceAdjustmentType.NONE,
+                padding_setting=nd.PaddingType.NONE, start_date=start, end_date=end,
+                timeseriesformat="pandas-dataframe",
+            )
+        except Exception:
+            continue
+        if adj is None or len(adj) == 0:
+            continue
+        adj = adj.rename(columns=str.lower)
+        raw = raw.rename(columns=str.lower)
+        if len(raw) != len(adj):    # the old DataFrame build raised here; keep that behaviour explicit
+            raise ValueError(f"{s}: {len(adj)} adjusted bars but {len(raw)} raw bars")
+        parts["date"].append(pd.to_datetime(adj.index).tz_localize(None).normalize())
+        for c in ("open", "high", "low", "close", "volume"):
+            parts[c].append(raw[c].values)
+        parts["adj_close"].append(adj["close"].values)
+        names.append(s); counts.append(len(adj)); ids.append(nd.assetid(s))
+    if not names:
+        return pd.DataFrame(columns=COLS + ["assetid"])
+    data = {}
+    for c in ("date", "ticker", "open", "high", "low", "close", "volume", "adj_close"):
+        if c == "ticker":
+            data[c] = np.repeat(np.array(names, dtype=object), counts)
+            continue
+        if c == "date":
+            data[c] = parts[c][0].append(parts[c][1:]) if len(parts[c]) > 1 else parts[c][0]
+        else:
+            data[c] = np.concatenate(parts[c])
+        parts[c].clear()             # free each column's pieces as soon as it is joined
+    data["assetid"] = np.repeat(np.array(ids), counts)
+    out = pd.DataFrame(data, copy=False)
+    del data, parts
+    return out
+
+
+def fetch_bars_concat(symbols: list[str], start: str, end: str | None = None) -> pd.DataFrame:
+    """The pre-2026-11-21 fetch_bars (per-symbol frames + pd.concat), kept for the equality test only."""
     nd = _nd()
     frames = []
     for s in symbols:

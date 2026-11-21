@@ -183,6 +183,8 @@ live:
   # (DAY orders queue for the open and fill within minutes of it). From 11-19: "opg" again WITH the morning
   # fallback (scripts/open_fallback.py, Task Scheduler "StockTrader Open Fallback", weekdays 8:32 am CT): every
   # auction order that did not fill is resent as a market order within open_fallback_window_min of the open.
+  # 2026-11-20: the fallback task repeats every 3 min until 8:50 am CT; on 11-18 Alpaca marked auction orders expired
+  # from 9:30:31 to 9:33:10 ET, so a single 9:32 ET check would have skipped 5 of 59 (still "new" when it looked).
   # The paper account proves the fallback (its auctions almost never fill); a real account gets the auction price
   # whenever the auction works.
   order_type: "opg"
@@ -191,6 +193,13 @@ live:
   # Memory guard (src/memguard.py): the daily job is stopped, before any order is sent, if free RAM
   # falls below this many GB. An unguarded run froze the PC on 2026-11-11. null = off.
   min_free_gb: 1.0
+  # Daily-job supervisor (scripts/run_daily_retry.py, run by Task Scheduler "StockTrader Daily"): when run_daily stops
+  # without finishing (memory guard or data not current = exit 3, or a crash) it runs it again every_min minutes
+  # later, at most max_attempts runs, never starting after last_start (local) so the batch keeps today's date.
+  # A safety stop (exit 4) is never retried. Discord alerts (report channel): first stop, recovery, giving up,
+  # safety stop, and a finished run that wrote to data/run_daily_errors.log. 2026-11-20: added after the 11-19 run
+  # was stopped by the memory guard at 5:30 pm CT and only a manual rerun at 6:44 pm sent the orders.
+  retry: {every_min: 30, max_attempts: 6, last_start: "22:00", attempt_timeout_min: 90}
   # Safety limits (src/safety.py), checked right before orders go out; any stop = no orders that day, exit code 4.
   # Defaults sit just above the live model's backtest extremes (stock turnover 0.67, sleeve change 0.81, 38-45 names).
   # Real money also needs LIVE_TRADING_CONFIRM=yes-real-money in .env next to ALPACA_PAPER=false.

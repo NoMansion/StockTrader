@@ -7,9 +7,11 @@ Handles the three universe modes so scripts don't repeat the logic:
 """
 from __future__ import annotations
 
+import gc
+
 import pandas as pd
 
-from .data import load_bars, to_wide
+from .data import load_wide
 from .universe import liquidity_membership, load_universe, norgate_universe
 
 
@@ -35,8 +37,12 @@ def load_dataset(cfg: dict, provider: str | None = None, refresh: bool = False):
     else:
         raise ValueError(f"unknown universe mode: {mode}")
 
-    bars = load_bars(tickers, start, provider=provider, cache_dir=d["cache_dir"], refresh=refresh)
-    close, volume, raw_close = to_wide(bars, "adj_close"), to_wide(bars, "volume"), to_wide(bars, "close")
+    # straight to the three matrices (same values as load_bars + to_wide, a fraction of the memory peak)
+    w = load_wide(tickers, start, ["adj_close", "volume", "close"], provider=provider, cache_dir=d["cache_dir"],
+                  refresh=refresh)
+    gc.collect()
+    close, volume, raw_close = w["adj_close"], w["volume"], w["close"]
+    del w
 
     if mode == "liquidity":
         # Rank on RAW close x raw volume. Split-adjusted close x unadjusted

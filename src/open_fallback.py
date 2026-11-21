@@ -8,6 +8,7 @@ Pure planning only (no broker calls) so it can be tested; scripts/open_fallback.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 UNFILLED_END = {"expired", "canceled", "cancelled", "rejected", "done_for_day"}
@@ -24,6 +25,15 @@ def last_batch(log_path: Path = Path("data/orders.log")) -> dict | None:
             if not rec.get("fallback"):
                 return rec
     return None
+
+
+def batch_is_for_today(batch_day: date, prev_session: date | None, today: date) -> bool:
+    """Was this orders.log batch sent for today's open?
+
+    orders.log dates a batch by the calendar day it was sent, so a batch for today's open is dated from the previous
+    session (the normal evening run) up to today (a weekend or holiday run, or one sent before the open). Anything
+    older was for an earlier open and must not be resent."""
+    return prev_session is not None and prev_session <= batch_day <= today
 
 
 def plan_resends(batch_orders: list[dict], status: dict[str, dict], held_qty: dict[str, float],
