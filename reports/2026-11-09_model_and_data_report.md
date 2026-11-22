@@ -747,3 +747,14 @@ Section 8.25 left one gap: the model without the put/call gate had only been run
 | Without gate | 1.429 | 1.395 | 1.835 | 1.125 | 15.2% | -16.9% | 10.6% |
 
 The gate's edge holds under costs: +0.042, against +0.050 at flat cost. It is ahead in both halves, with the same CAGR and drawdown and lower volatility. It trades a little more (2.02% vs 1.89% a year in costs), and that is already counted. The gate stays. The sweep is stopped again.
+
+### 8.27 Saturday 2026-11-21, 6:15 pm: the first live week (fills, fallback, memory)
+
+- **Morning resend works.** On the paper account most opening-auction orders expire. On 11-20, 6 of 28 auction orders filled and 22 expired. The fallback resent all 22 as market orders (16 at 9:32 ET, 6 at 9:35 ET) and all 22 filled. It now repeats every 3 minutes until 8:50 am CT, because Alpaca marks expired auction orders over about 3 minutes after the open.
+- **Real fill cost.** Over 5 trading days, 276 fills cost +12.6 bps against the opening price, weighted by dollars (median 0, 98% filled within 5 minutes of the open). That is 2.6 bps worse than the 10 bps the backtest assumes. Most of the gap comes from a few small names that filled 3-5% away.
+- **Live vs model.** Over the first 2 tracked days (11-19 and 11-20), the account returned -0.51% and the model -0.47%, a gap of about 2 bps a day. Two days settle nothing; the check repeats weekly.
+- **Missed runs and the fixes.** The memory guard stopped the 5:30 pm job on 11-19 and 11-20 (the job used 5-7 GB, and other programs held the rest). Three fixes followed:
+  - A retry supervisor reruns a stopped job every 30 minutes until 10:00 pm and posts alerts to Discord.
+  - The price loader now builds its matrices without copying the 24.5-million-row table. This cut the job's peak from about 5.6 GB to about 4.5 GB, with byte-identical output.
+  - A batch sent on a weekend or holiday now counts for the next open. Friday's missed batch was sent on Saturday as market orders for Monday's open.
+- No model change. The sweep is still stopped.
