@@ -1,5 +1,5 @@
 # Heartbeat for an external uptime monitor (e.g. healthchecks.io). Run every 10 min from Task Scheduler:
-#   schtasks /create /tn "StockTrader Heartbeat" /sc minute /mo 10 /f /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File E:\Coding\StockTrader\scripts\heartbeat.ps1"
+#   schtasks /create /tn "StockTrader Heartbeat" /sc minute /mo 10 /f /tr "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Coding\StockTrader\scripts\heartbeat.ps1"
 # Put the check's ping URL in .env as HEALTHCHECK_URL=https://hc-ping.com/<uuid>  (never commit .env).
 # If the PC goes offline, sleeps, or the task stops, the monitor stops receiving pings and emails/pushes you.
 $root = Split-Path -Parent $PSScriptRoot

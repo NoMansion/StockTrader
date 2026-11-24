@@ -13,7 +13,7 @@ The page (src/report_site.py) is PUBLIC (gh-pages branch of the repo, one fresh 
 holds percentages and weights only, never dollar amounts. The Discord post has dollars; the channel is private.
 
 Settings (.env, never committed): DISCORD_REPORT_CHANNEL_ID, REPORT_SITE_URL; DISCORD_TOKEN, or else the bot's own
-.env at DISCORD_BOT_ENV (default E:/Coding/DiscordBot/.env). Fill history is cached in data/discord_fills_cache.json.
+.env at DISCORD_BOT_ENV (default: DiscordBot/.env next to this project's folder). Fill history is cached in data/discord_fills_cache.json.
 """
 import _bootstrap  # noqa: F401
 
@@ -320,7 +320,7 @@ def post(emb: dict, image: tuple[str, bytes] | None, site_url: str | None, chann
 def discord_token() -> str | None:
     if os.environ.get("DISCORD_TOKEN"):
         return os.environ["DISCORD_TOKEN"]
-    p = Path(os.environ.get("DISCORD_BOT_ENV", "E:/Coding/DiscordBot/.env"))
+    p = Path(os.environ.get("DISCORD_BOT_ENV", Path(__file__).resolve().parents[2] / "DiscordBot" / ".env"))
     if p.exists():
         from dotenv import dotenv_values
         return dotenv_values(p).get("DISCORD_TOKEN")

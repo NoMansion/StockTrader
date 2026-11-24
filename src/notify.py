@@ -1,7 +1,7 @@
 """Short alert messages to the private Discord report channel (the same bot and channel as the daily report).
 
 Settings come from .env: DISCORD_REPORT_CHANNEL_ID, and DISCORD_TOKEN or else the bot's own .env at
-DISCORD_BOT_ENV (default E:/Coding/DiscordBot/.env). post_text() never raises: an alert that cannot be sent is
+DISCORD_BOT_ENV (default: DiscordBot/.env in the folder that holds this project). post_text() never raises: an alert that cannot be sent is
 reported back as False so the caller can log it, and must never break the job it reports on.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ UA = "DiscordBot (https://example.invalid, 1.0)"
 def discord_token() -> str | None:
     if os.environ.get("DISCORD_TOKEN"):
         return os.environ["DISCORD_TOKEN"]
-    p = Path(os.environ.get("DISCORD_BOT_ENV", "E:/Coding/DiscordBot/.env"))
+    p = Path(os.environ.get("DISCORD_BOT_ENV", Path(__file__).resolve().parents[2] / "DiscordBot" / ".env"))
     if p.exists():
         from dotenv import dotenv_values
         return dotenv_values(p).get("DISCORD_TOKEN")
