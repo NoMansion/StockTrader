@@ -151,3 +151,59 @@ def test_fallback_lock_allows_one_sender_and_takes_over_a_stale_lock(tmp_path, m
     assert open_fallback.take_lock(lock, stale_s=600) is True       # left by a killed run
     open_fallback.release_lock(lock)
     assert not lock.exists()
+
+
+def test_tracker_runs_once_after_a_finished_run_only(monkeypatch, tmp_path):
+    _patch_files(monkeypatch, tmp_path)
+    for codes, expected_calls in (([0], 1), ([3, 0], 1), ([4], 0), ([3] * 10, 0)):
+        clock, tracked = Clock(T0), []
+        run, _ = _runner(codes, clock, tmp_path)
+        sup.supervise([], POL, run=run, now=clock.now, sleep=clock.sleep, notify=lambda t: None,
+                      track=lambda: tracked.append(1))
+        assert len(tracked) == expected_calls, codes
+
+
+def test_tracker_error_never_changes_the_exit_code(monkeypatch, tmp_path):
+    _patch_files(monkeypatch, tmp_path)
+    clock, posted = Clock(T0), []
+    run, _ = _runner([0], clock, tmp_path)
+
+    def boom():
+        raise OSError("cannot start")
+    assert sup.supervise([], POL, run=run, now=clock.now, sleep=clock.sleep, notify=posted.append, track=boom) == 0
+    assert posted == []
+
+
+class _FakeProc:
+    def __init__(self, code=None, hang=False):
+        self.code, self.hang, self.killed = code, hang, False
+
+    def wait(self, timeout=None):
+        if self.hang and not self.killed:
+            raise sup.subprocess.TimeoutExpired("track_live.py", timeout)
+        return self.code
+
+    def kill(self):
+        self.killed = True
+
+
+def test_run_tracker_logs_a_failure_or_timeout_but_not_a_success(monkeypatch, tmp_path):
+    _patch_files(monkeypatch, tmp_path)
+    errors = tmp_path / "run_daily_errors.log"
+    for proc, code, logged in ((_FakeProc(0), 0, None), (_FakeProc(1), 1, "exit code 1"),
+                               (_FakeProc(hang=True), None, "did not finish within 10 min")):
+        errors.write_text("")
+        seen = {}
+
+        def popen(args, cwd=None, _p=proc):
+            seen["args"] = args
+            return _p
+        monkeypatch.setattr(sup.subprocess, "Popen", popen)
+        assert sup.run_tracker() == code
+        assert seen["args"][-1].endswith("track_live.py")
+        text = errors.read_text()
+        if logged is None:
+            assert text == ""
+        else:
+            assert "live-vs-model tracker failed" in text and logged in text
+    assert proc.killed

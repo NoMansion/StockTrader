@@ -7,6 +7,10 @@ Runs scripts/run_daily.py. When it stops without finishing (memory guard, price 
 waits and runs it again. It posts to the Discord report channel on the first stop (with the retry time), on
 recovery, when it gives up, on a safety stop (never retried), and when a run finishes but wrote new lines to
 data/run_daily_errors.log (rejected orders, for example). A normal day posts nothing.
+After a run that finished (orders sent, or a hold day / holiday) it runs the live-vs-model tracker
+(scripts/track_live.py, read-only, a few seconds), which rebuilds data/tracking.csv from every snapshot in
+data/targets/. The tracker runs in its own process after the orders are in: a tracker failure is logged to
+data/run_daily_errors.log and never changes the job's exit code.
 Retry policy and exit codes: src/daily_retry.py; settings: live.retry in config.yaml. Any other arguments are
 passed through to run_daily.py.
 """
@@ -29,6 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 LOG = ROOT / "data" / "run_daily.log"
 ERRORS = ROOT / "data" / "run_daily_errors.log"
 ORDERS = ROOT / "data" / "orders.log"
+TRACK_TIMEOUT_MIN = 10
 
 
 def say(msg: str) -> None:
@@ -85,9 +90,31 @@ def run_once(extra: list[str], timeout_min: int) -> int | None:
         return None
 
 
+def run_tracker(timeout_min: int = TRACK_TIMEOUT_MIN) -> int | None:
+    """The live-vs-model tracker in its own process; output goes to the log. None = killed at the time limit.
+    A failure is written to the errors log (not alerted: the orders are already in and are not affected)."""
+    say("live-vs-model tracker (scripts/track_live.py)")
+    p = subprocess.Popen([sys.executable, "-u", str(ROOT / "scripts" / "track_live.py")], cwd=ROOT)
+    try:
+        code = p.wait(timeout=timeout_min * 60)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.wait()
+        code = None
+    if code != 0:
+        note = f"did not finish within {timeout_min} min" if code is None else f"exit code {code}"
+        say(f"tracker failed ({note}); data/tracking.csv not updated; the orders are not affected")
+        with open(ERRORS, "a") as fh:
+            fh.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} live-vs-model tracker failed ({note}); "
+                     f"data/tracking.csv not updated\n")
+    return code
+
+
 def supervise(extra: list[str], pol: dr.Policy, run=run_once, now=datetime.now, sleep=time.sleep,
-              notify=None) -> int:
-    """The retry loop; returns the exit code for Task Scheduler (0, or the last run_daily code)."""
+              notify=None, track=None) -> int:
+    """The retry loop; returns the exit code for Task Scheduler (0, or the last run_daily code).
+    `track`: called once after a finished run (main passes run_tracker); its result and errors never change the
+    exit code."""
     notify = notify or alert
     first = now()
     attempt, warned = 0, False
@@ -111,6 +138,11 @@ def supervise(extra: list[str], pol: dr.Policy, run=run_once, now=datetime.now, 
                 texts.append(dr.finished_with_problems_text(new_err, end))
             if texts:
                 notify("\n".join(texts))
+            if track is not None:
+                try:
+                    track()
+                except Exception as e:   # noqa: BLE001  (e.g. the process could not start)
+                    say(f"tracker not run: {type(e).__name__}: {str(e)[:200]}")
             return 0
 
         why = dr.reason(code, out, new_err)
@@ -138,7 +170,7 @@ def main() -> int:
         print(detail)
         return 0 if ok else 1
     live = (yaml.safe_load((ROOT / "config.yaml").read_text()) or {}).get("live", {})
-    return supervise(extra, dr.policy_from_config(live))
+    return supervise(extra, dr.policy_from_config(live), track=run_tracker)
 
 
 if __name__ == "__main__":
