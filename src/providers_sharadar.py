@@ -55,11 +55,29 @@ def _get(table: str, **params) -> pd.DataFrame:
             time.sleep(RETRY_WAITS[attempt])
 
 
+# The bulk tickers file labels each row with its table. Sharadar renamed the labels in Nov 2026 ("SF1" became
+# "fundamentals", "SEP" became "stocks"); filtering on "SF1" alone then kept 0 rows, the empty master mapped no
+# name, and the 2026-11-25 run chose 0 stocks (stopped by the position-count safety limit).
+FUNDAMENTALS_TABLES = ("SF1", "fundamentals")
+MIN_TICKERS = 5000          # the fundamentals master has ~18,000 rows; fewer than this is a broken download
+
+
+def _cached_tickers(p: Path) -> pd.DataFrame | None:
+    """The cached master, or None when it is missing or too small to be real."""
+    if not p.exists():
+        return None
+    t = pd.read_pickle(p)
+    return t if len(t) >= MIN_TICKERS else None
+
+
 def fetch_tickers(cache_dir: str | Path = "data", refresh: bool = False) -> pd.DataFrame:
-    """Securities master for the fundamentals table (bulk zip, cached)."""
+    """Securities master for the fundamentals table (bulk zip, cached). A cached master that is too small is
+    downloaded again; a download that is too small raises and never replaces the cache."""
     p = Path(cache_dir) / "sharadar_tickers.pkl"
-    if p.exists() and not refresh:
-        return pd.read_pickle(p)
+    if not refresh:
+        t = _cached_tickers(p)
+        if t is not None:
+            return t
     r = requests.get(f"{BASE}/data/tickers", params={"years": "full"}, headers={"x-api-key": _key()}, allow_redirects=False, timeout=120)
     if r.status_code not in (301, 302, 303, 307):
         raise RuntimeError(f"tickers bulk download failed: HTTP {r.status_code}")
@@ -67,10 +85,17 @@ def fetch_tickers(cache_dir: str | Path = "data", refresh: bool = False) -> pd.D
     z.raise_for_status()
     zf = zipfile.ZipFile(io.BytesIO(z.content))
     t = pd.read_csv(zf.open(zf.namelist()[0]), low_memory=False)
-    t = t[t["table"] == "SF1"].copy()
+    keep = t["table"].isin(FUNDAMENTALS_TABLES)
+    if int(keep.sum()) < MIN_TICKERS:
+        labels = sorted(str(x) for x in t["table"].dropna().unique())[:10]
+        raise RuntimeError(f"tickers bulk download has only {int(keep.sum())} fundamentals rows (table labels: "
+                           f"{', '.join(labels)}); the cached master is kept")
+    t = t[keep].copy()
     t["lastpricedate"] = pd.to_datetime(t["lastpricedate"], errors="coerce")
     p.parent.mkdir(parents=True, exist_ok=True)
-    t.to_pickle(p)
+    tmp = p.with_suffix(".pkl.tmp")
+    t.to_pickle(tmp)
+    os.replace(tmp, p)
     return t
 
 
@@ -165,7 +190,7 @@ def load_fundamentals(symbols: list[str], days: pd.DatetimeIndex, cache_dir: str
     try:
         tk = fetch_tickers(cache_dir, refresh=refresh_tickers)
     except Exception as e:   # noqa: BLE001 - a stale ticker master is still usable
-        if not (cache_dir / "sharadar_tickers.pkl").exists():
+        if _cached_tickers(cache_dir / "sharadar_tickers.pkl") is None:
             raise
         _log_error(f"Sharadar ticker master refresh failed ({type(e).__name__}: {str(e)[:120]}); using the cached one", cache_dir)
         tk = fetch_tickers(cache_dir)
